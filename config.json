@@ -1,0 +1,56 @@
+{
+  "server": {
+    "host": "127.0.0.1",
+    "port": 8000,
+    "frontend_port": 3000,
+    "cors_origins": ["http://localhost:3000", "http://127.0.0.1:3000"],
+    "llm_endpoint": "http://localhost:1235/api/v1/chat",
+    "llm_model": "nvidia/nemotron-3-nano-4b",
+    "llm_timeout": 600,
+    "llm": {
+      "port": 1235,
+      "model_path": "/Users/moltisantid/.lmstudio/models/lmstudio-community/NVIDIA-Nemotron-3-Nano-4B-GGUF/NVIDIA-Nemotron-3-Nano-4B-Q4_K_M.gguf",
+      "ctx_size": 36466,
+      "n_gpu_layers": 42,
+      "n_threads": 8,
+      "n_batch": 512,
+      "n_ubatch": 512
+    }
+  },
+  "app": {
+    "session_ttl_minutes": 30,
+    "max_file_size_mb": 50,
+    "cache": {
+      "enabled": true,
+      "cache_dir": ".cache/redactguard",
+      "pdf_cache": {
+        "enabled": true,
+        "max_size_mb": 500,
+        "ttl_days": 7
+      },
+      "llm_cache": {
+        "enabled": true,
+        "max_size_mb": 200,
+        "ttl_days": 30
+      }
+    }
+  },
+  "ui": {
+    "pii_categories": {
+      "private_person": { "color": "pii-person", "icon": "User", "label": "Name" },
+      "private_email": { "color": "pii-contact", "icon": "Mail", "label": "Email" },
+      "private_phone": { "color": "pii-contact", "icon": "Phone", "label": "Phone" },
+      "private_address": { "color": "pii-location", "icon": "MapPin", "label": "Address" },
+      "private_date": { "color": "pii-date", "icon": "Calendar", "label": "Date" },
+      "private_url": { "color": "pii-contact", "icon": "Link", "label": "URL" },
+      "health_condition": { "color": "pii-health", "icon": "Heart", "label": "Health" },
+      "health_treatment": { "color": "pii-health", "icon": "Pill", "label": "Treatment" },
+      "health_lab_result": { "color": "pii-lab", "icon": "FlaskConical", "label": "Lab" },
+      "personal_measurement": { "color": "pii-measurement", "icon": "Ruler", "label": "Measurement" },
+      "personal_demographic": { "color": "pii-measurement", "icon": "Users", "label": "Demographic" },
+      "lifestyle_info": { "color": "pii-measurement", "icon": "Activity", "label": "Lifestyle" },
+      "account_number": { "color": "pii-secret", "icon": "CreditCard", "label": "Account/ID" },
+      "secret": { "color": "pii-secret", "icon": "Key", "label": "Secret" }
+    }
+  }
+}

@@ -1,0 +1,57 @@
+name: General
+description: "General-purpose PII detection for any document type."
+pii_types:
+  private_person:
+    label: "Person Name"
+    description: "Any person name: first name, last name, nickname, or professional title."
+    examples: ["Mario Rossi", "Dr. Bianchi"]
+    color: "pii-person"
+    icon: "User"
+  private_email:
+    label: "Email"
+    description: "Any email address."
+    examples: ["nome@example.com"]
+    color: "pii-contact"
+    icon: "Mail"
+  private_phone:
+    label: "Phone"
+    description: "Any phone or fax number."
+    examples: ["+39 333 1234567", "06 12345678"]
+    color: "pii-contact"
+    icon: "Phone"
+  private_address:
+    label: "Address"
+    description: "Any postal address, city, or geolocation identifying a person."
+    examples: ["Via Roma 15, Milano"]
+    color: "pii-location"
+    icon: "MapPin"
+  private_date:
+    label: "Date"
+    description: "Any date associated with a person (birth, appointment, event)."
+    examples: ["03/01/2025", "15 marzo 1985"]
+    color: "pii-date"
+    icon: "Calendar"
+  private_url:
+    label: "URL"
+    description: "Personal URL, profile link, or sharing link."
+    examples: ["https://linkedin.com/in/mrossi"]
+    color: "pii-contact"
+    icon: "Link"
+  account_number:
+    label: "Account/ID"
+    description: "Any personal identifier: fiscal code, ID number, account number, license plate."
+    examples: ["CF: RSSMRA85M01H501Z", "carta identità AB1234567"]
+    color: "pii-secret"
+    icon: "CreditCard"
+  personal_demographic:
+    label: "Demographic"
+    description: "Demographic attribute: age, gender, nationality, ethnicity, religion."
+    examples: ["45 anni", "sesso M"]
+    color: "pii-measurement"
+    icon: "Users"
+  secret:
+    label: "Secret"
+    description: "Any credential, password, access code, or confidential information."
+    examples: ["password", "PIN"]
+    color: "pii-secret"
+    icon: "Key"

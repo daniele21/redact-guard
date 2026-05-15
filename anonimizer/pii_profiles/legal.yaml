@@ -1,0 +1,57 @@
+name: Legal
+description: "PII detection for legal, contractual, and compliance documents."
+pii_types:
+  private_person:
+    label: "Person Name"
+    description: "Person name referring to a party, witness, attorney, or legal representative."
+    examples: ["Avv. Rossi", "Mario Bianchi", "parte attrice"]
+    color: "pii-person"
+    icon: "User"
+  private_email:
+    label: "Email"
+    description: "Email address identifying or contacting a party."
+    examples: ["avv.rossi@studio.it", "segreteria@tribunale.it"]
+    color: "pii-contact"
+    icon: "Mail"
+  private_phone:
+    label: "Phone"
+    description: "Phone or contact number for a party."
+    examples: ["+39 02 12345678"]
+    color: "pii-contact"
+    icon: "Phone"
+  private_address:
+    label: "Address"
+    description: "Postal address, registered office, or domicile of a party."
+    examples: ["Via Manzoni 10, 20121 Milano", "sede legale in Roma"]
+    color: "pii-location"
+    icon: "MapPin"
+  private_date:
+    label: "Date"
+    description: "Date associated with a contract, hearing, filing, or legal event."
+    examples: ["10/03/2025", "sottoscritto in data 15.01.2024"]
+    color: "pii-date"
+    icon: "Calendar"
+  account_number:
+    label: "Account/ID"
+    description: "Fiscal code, VAT number, case number, contract ID, or document reference."
+    examples: ["CF: RSSMRA85M01H501Z", "P.IVA 12345678901", "RG n. 1234/2024"]
+    color: "pii-secret"
+    icon: "CreditCard"
+  private_url:
+    label: "URL"
+    description: "Personal URL, portal link, or document sharing link."
+    examples: ["https://pec.registro.it/doc/123"]
+    color: "pii-contact"
+    icon: "Link"
+  personal_demographic:
+    label: "Demographic"
+    description: "Demographic attribute: age, gender, nationality, place of birth."
+    examples: ["nato a Milano il 15/03/1985", "cittadinanza italiana"]
+    color: "pii-measurement"
+    icon: "Users"
+  secret:
+    label: "Secret/Credential"
+    description: "Credential, access code, confidential signature, or secret information."
+    examples: ["firma digitale", "codice OTP"]
+    color: "pii-secret"
+    icon: "Key"

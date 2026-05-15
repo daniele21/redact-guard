@@ -1,0 +1,51 @@
+name: Financial
+description: "PII detection for banking, insurance, and financial documents."
+pii_types:
+  private_person:
+    label: "Person Name"
+    description: "Person name: account holder, beneficiary, authorized signatory."
+    examples: ["Mario Rossi", "intestatario conto"]
+    color: "pii-person"
+    icon: "User"
+  private_email:
+    label: "Email"
+    description: "Email address identifying or contacting the account holder."
+    examples: ["m.rossi@email.com"]
+    color: "pii-contact"
+    icon: "Mail"
+  private_phone:
+    label: "Phone"
+    description: "Phone or contact number for the account holder."
+    examples: ["+39 333 1234567"]
+    color: "pii-contact"
+    icon: "Phone"
+  private_address:
+    label: "Address"
+    description: "Postal address, residence, or domicile of the account holder."
+    examples: ["Via Garibaldi 22, Torino"]
+    color: "pii-location"
+    icon: "MapPin"
+  private_date:
+    label: "Date"
+    description: "Date associated with a transaction, account opening, or financial event."
+    examples: ["01/04/2025", "scadenza 31/12/2025"]
+    color: "pii-date"
+    icon: "Calendar"
+  account_number:
+    label: "Account Number"
+    description: "Bank account number, IBAN, credit card number, policy number, fiscal code, or financial identifier."
+    examples: ["IBAN IT60X0542811101000000123456", "carta **** 4532", "CF: RSSMRA85M01H501Z"]
+    color: "pii-secret"
+    icon: "CreditCard"
+  personal_demographic:
+    label: "Demographic"
+    description: "Demographic attribute: age, gender, nationality, place of birth, occupation."
+    examples: ["nato il 15/03/1985", "professione: ingegnere"]
+    color: "pii-measurement"
+    icon: "Users"
+  secret:
+    label: "Secret/Credential"
+    description: "PIN, password, OTP, security question, access credential."
+    examples: ["PIN dispositivo", "codice cliente"]
+    color: "pii-secret"
+    icon: "Key"

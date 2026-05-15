@@ -1,0 +1,46 @@
+@import "tailwindcss";
+
+@theme {
+  /* Typography */
+  --font-sans: "Inter", sans-serif;
+
+  /* Primary palette */
+  --color-primary: #004ac6;
+  --color-on-primary: #ffffff;
+  --color-primary-container: #2563eb;
+
+  /* Surface system */
+  --color-surface: #f9f9ff;
+  --color-surface-dim: #d3daea;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #f0f3ff;
+  --color-surface-container: #e7eefe;
+  --color-surface-container-high: #e2e8f8;
+  --color-surface-container-highest: #dce2f3;
+
+  /* Text */
+  --color-on-surface: #151c27;
+  --color-on-surface-variant: #434655;
+  --color-outline: #737686;
+  --color-outline-variant: #c3c6d7;
+
+  /* Feedback */
+  --color-error: #ba1a1a;
+  --color-success: #059669;
+  --color-warning: #d97706;
+
+  /* PII category colors */
+  --color-pii-person: #3b82f6;
+  --color-pii-contact: #8b5cf6;
+  --color-pii-location: #06b6d4;
+  --color-pii-date: #f59e0b;
+  --color-pii-health: #ef4444;
+  --color-pii-lab: #f97316;
+  --color-pii-measurement: #14b8a6;
+  --color-pii-secret: #6b7280;
+  --color-pii-custom: #ec4899;
+}
+
+body {
+  @apply bg-surface text-on-surface font-sans antialiased;
+}

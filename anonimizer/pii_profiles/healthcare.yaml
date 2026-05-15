@@ -1,0 +1,81 @@
+name: Healthcare
+description: "PII detection optimized for medical and clinical documents."
+pii_types:
+  private_person:
+    label: "Person Name"
+    description: "Person name referring to the patient, client, relative, or healthcare professional."
+    examples: ["Mario Rossi", "Dr. Bianchi", "sig.ra Verdi"]
+    color: "pii-person"
+    icon: "User"
+  private_email:
+    label: "Email"
+    description: "Email address identifying or contacting the person."
+    examples: ["m.rossi@gmail.com", "studio@clinica.it"]
+    color: "pii-contact"
+    icon: "Mail"
+  private_phone:
+    label: "Phone"
+    description: "Phone or contact number for the person."
+    examples: ["+39 333 1234567", "06 12345678"]
+    color: "pii-contact"
+    icon: "Phone"
+  private_address:
+    label: "Address"
+    description: "Postal address or location identifying the person."
+    examples: ["Via Roma 15, Milano", "Piazza Duomo 1"]
+    color: "pii-location"
+    icon: "MapPin"
+  private_date:
+    label: "Date"
+    description: "Date associated with the person or their private record (birth, visit, diagnosis)."
+    examples: ["03/01/2025", "15 marzo 1985"]
+    color: "pii-date"
+    icon: "Calendar"
+  health_condition:
+    label: "Health Condition"
+    description: "Health condition, diagnosis, symptom, allergy, intolerance, or clinical history."
+    examples: ["diabete tipo 2", "ipertensione arteriosa", "celiachia"]
+    color: "pii-health"
+    icon: "Heart"
+  health_treatment:
+    label: "Treatment"
+    description: "Medication, supplement, therapy, prescription, or treatment for the person."
+    examples: ["metformina 500mg", "terapia insulinica", "integratore ferro"]
+    color: "pii-health"
+    icon: "Pill"
+  health_lab_result:
+    label: "Lab Result"
+    description: "Lab result, biomarker, vital sign, clinical score, or exam result."
+    examples: ["HbA1c 7.2%", "PA 140/90 mmHg", "colesterolo totale 220 mg/dL"]
+    color: "pii-lab"
+    icon: "FlaskConical"
+  personal_measurement:
+    label: "Body Measurement"
+    description: "Anthropometric, biometric, or body measurement describing the person."
+    examples: ["peso 78 kg", "altezza 175 cm", "BMI 25.5"]
+    color: "pii-measurement"
+    icon: "Ruler"
+  personal_demographic:
+    label: "Demographic"
+    description: "Demographic attribute: age, gender, nationality, ethnicity."
+    examples: ["45 anni", "sesso M", "nazionalità italiana"]
+    color: "pii-measurement"
+    icon: "Users"
+  account_number:
+    label: "Account/ID"
+    description: "Personal account, fiscal code, medical record number, or document identifier."
+    examples: ["CF: RSSMRA85M01H501Z", "tessera sanitaria 123456789"]
+    color: "pii-secret"
+    icon: "CreditCard"
+  lifestyle_info:
+    label: "Lifestyle"
+    description: "Lifestyle habit or behavior associated with the person."
+    examples: ["fumatore", "sedentario", "dieta vegetariana"]
+    color: "pii-measurement"
+    icon: "Activity"
+  secret:
+    label: "Secret"
+    description: "Credential, access secret, confidential code, or private key."
+    examples: ["password", "PIN", "codice accesso"]
+    color: "pii-secret"
+    icon: "Key"

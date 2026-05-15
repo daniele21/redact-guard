@@ -1,0 +1,6 @@
+{
+  "name": "RedactGuard",
+  "description": "Local-first document anonymization.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
