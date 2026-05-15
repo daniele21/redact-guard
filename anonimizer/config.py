@@ -7,6 +7,8 @@ from typing import Any
 ROOT_DIR = Path(__file__).parent.parent
 CONFIG_FILE = ROOT_DIR / "config.json"
 
+import logging
+
 def load_json_config() -> dict[str, Any]:
     """Load configuration from the root config.json file."""
     if CONFIG_FILE.exists():
@@ -14,7 +16,7 @@ def load_json_config() -> dict[str, Any]:
             with open(CONFIG_FILE, "r") as f:
                 return json.load(f)
         except Exception as e:
-            print(f"Warning: Failed to load config.json: {e}")
+            logging.warning(f"Failed to load config.json: {e}")
     return {}
 
 _json_config = load_json_config()
@@ -48,6 +50,7 @@ class AppConfig:
     llm_endpoint: str = os.getenv("LLM_ENDPOINT", _server_conf.get("llm_endpoint", "http://localhost:1235/api/v1/chat"))
     llm_model: str = os.getenv("LLM_MODEL", _server_conf.get("llm_model", "nvidia/nemotron-3-nano-4b"))
     llm_timeout: int = int(os.getenv("LLM_TIMEOUT", str(_server_conf.get("llm_timeout", "600"))))
+    llm_max_output_tokens: int = int(os.getenv("LLM_MAX_OUTPUT_TOKENS", str(_server_conf.get("llm_max_output_tokens", "4096"))))
 
     session_ttl_minutes: int = int(os.getenv("SESSION_TTL_MINUTES", str(_app_conf.get("session_ttl_minutes", "30"))))
     max_file_size_mb: int = int(os.getenv("MAX_FILE_SIZE_MB", str(_app_conf.get("max_file_size_mb", "50"))))

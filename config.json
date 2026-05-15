@@ -7,6 +7,7 @@
     "llm_endpoint": "http://localhost:1235/api/v1/chat",
     "llm_model": "nvidia/nemotron-3-nano-4b",
     "llm_timeout": 600,
+    "llm_max_output_tokens": 4096,
     "llm": {
       "port": 1235,
       "model_path": "/Users/moltisantid/.lmstudio/models/lmstudio-community/NVIDIA-Nemotron-3-Nano-4B-GGUF/NVIDIA-Nemotron-3-Nano-4B-Q4_K_M.gguf",

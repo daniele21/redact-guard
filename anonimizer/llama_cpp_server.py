@@ -8,10 +8,18 @@ import signal
 import sys
 import threading
 import time
+import logging
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+)
+logger = logging.getLogger("nemotron-server")
 
 
 DEFAULT_HOST = "127.0.0.1"
@@ -243,8 +251,9 @@ def _load_llm(args: argparse.Namespace) -> Any:
     if args.chat_format:
         kwargs["chat_format"] = args.chat_format
 
-    print(f"Loading Nemotron GGUF: {model_path}", flush=True)
-    print(
+    logger.info(f"Loading Nemotron GGUF: {model_path}")
+    logger.info(
+        "Model configuration: %s",
         json.dumps(
             {
                 "model": args.model,
@@ -259,13 +268,12 @@ def _load_llm(args: argparse.Namespace) -> Any:
                 "chat_format": args.chat_format,
             },
             indent=2,
-        ),
-        flush=True,
+        )
     )
 
     llm = Llama(**kwargs)
 
-    print("Model loaded.", flush=True)
+    logger.info("Model loaded.")
     return llm
 
 
@@ -374,7 +382,7 @@ class NemotronHandler(BaseHTTPRequestHandler):
         _json_response(self, 404, {"error": f"Unknown route: {self.path}"})
 
     def log_message(self, fmt: str, *args: Any) -> None:
-        sys.stderr.write("[%s] %s\n" % (self.log_date_time_string(), fmt % args))
+        logger.info(f"{self.address_string()} - {fmt % args}")
 
     def _handle_chat(self) -> None:
         started_at = time.perf_counter()
@@ -421,15 +429,15 @@ class NemotronHandler(BaseHTTPRequestHandler):
             elif self.app.force_json:
                 kwargs["response_format"] = {"type": "json_object"}
 
-            print("\n[SERVER DEBUG] Invoking create_chat_completion with arguments:")
-            print(json.dumps({k: v for k, v in kwargs.items() if k != "messages"}, indent=2))
+            logger.debug("Invoking create_chat_completion with arguments: %s", 
+                         json.dumps({k: v for k, v in kwargs.items() if k != "messages"}, indent=2))
             
             with self.app.generation_lock:
                 try:
                     raw_response = self.app.llm.create_chat_completion(**kwargs)
                 except TypeError as exc:
                     if "chat_template_kwargs" in str(exc):
-                        print("\n[SERVER WARNING] 'chat_template_kwargs' is not supported by your current llama-cpp-python version. Retrying without it...", file=sys.stderr)
+                        logger.warning("'chat_template_kwargs' is not supported by your current llama-cpp-python version. Retrying without it...")
                         kwargs.pop("chat_template_kwargs", None)
                         raw_response = self.app.llm.create_chat_completion(**kwargs)
                     else:
@@ -445,8 +453,7 @@ class NemotronHandler(BaseHTTPRequestHandler):
             return
         except Exception as exc:
             import traceback
-            print("\n[SERVER ERROR] Exception occurred during inference:", file=sys.stderr)
-            traceback.print_exc()
+            logger.error("Exception occurred during inference: %s", traceback.format_exc())
             _json_response(self, 500, {"error": f"Nemotron inference failed: {exc}"})
             return
 
@@ -584,16 +591,15 @@ def main() -> None:
         ) from exc
 
     def shutdown(signum: int, _frame: Any) -> None:
-        print(f"\nReceived signal {signum}; stopping server.", flush=True)
+        logger.info(f"Received signal {signum}; stopping server.")
         threading.Thread(target=server.shutdown, daemon=True).start()
 
     signal.signal(signal.SIGINT, shutdown)
     signal.signal(signal.SIGTERM, shutdown)
 
-    print(
+    logger.info(
         f"Nemotron llama-cpp-python server listening on "
-        f"http://{args.host}:{args.port}/api/v1/chat",
-        flush=True,
+        f"http://{args.host}:{args.port}/api/v1/chat"
     )
 
     try:

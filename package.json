@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
     "server:llm": "./.venv/bin/python anonimizer/llama_cpp_server.py",
-    "server:api": "cd anonimizer && ../.venv/bin/uvicorn main:app --port 8000 --reload",
-    "start": "concurrently -n LLM,API,WEB -c \"magenta,cyan,blue\" \"pnpm server:llm\" \"pnpm server:api\" \"pnpm dev\"",
+    "server:api": "cd anonimizer && ../.venv/bin/python main.py",
+    "start": "concurrently -t \"HH:mm:ss.SSS\" -n LLM,API,WEB -c \"magenta,cyan,blue\" \"pnpm server:llm\" \"pnpm server:api\" \"pnpm dev\"",
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",

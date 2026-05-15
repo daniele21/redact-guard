@@ -62,5 +62,18 @@ def read_root():
 
 if __name__ == "__main__":
     import uvicorn
+    from uvicorn.config import LOGGING_CONFIG
+    
+    # Customize uvicorn logging to include timestamps
+    log_format = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+    LOGGING_CONFIG["formatters"]["access"]["fmt"] = log_format
+    LOGGING_CONFIG["formatters"]["default"]["fmt"] = log_format
+    
     logger.info(f"Starting RedactGuard on {config.host}:{config.port}")
-    uvicorn.run("main:app", host=config.host, port=config.port, reload=True)
+    uvicorn.run(
+        "main:app", 
+        host=config.host, 
+        port=config.port, 
+        reload=True,
+        log_config=LOGGING_CONFIG
+    )
