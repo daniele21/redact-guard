@@ -1,24 +1,27 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, Lock } from 'lucide-react';
-import { DocumentState, AppStep } from '../../hooks/useDocument';
+import { ChevronLeft, ChevronRight, Lock, Brain, RefreshCw } from 'lucide-react';
+import { DocumentState } from '../../hooks/useDocument';
 import { DocumentPanel } from './DocumentPanel';
 import { PIISidebar } from './PIISidebar';
 
 interface ReviewStepProps {
   state: DocumentState;
+  onAnalyzePage: (pageNumber: number, force?: boolean) => Promise<void>;
   onApplyRedactions: (overrides: Record<string, boolean>) => Promise<void>;
   onProceed: () => void;
 }
 
-export function ReviewStep({ state, onApplyRedactions, onProceed }: ReviewStepProps) {
+export function ReviewStep({ state, onAnalyzePage, onApplyRedactions, onProceed }: ReviewStepProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [overrides, setOverrides] = useState<Record<string, boolean>>({});
+  const [excludedFields, setExcludedFields] = useState<Set<string>>(new Set());
   const [isExporting, setIsExporting] = useState(false);
+  
 
   const totalPages = state.pages.length;
   const currentResult = state.analysisResults[currentPage];
   const currentPageData = state.pages.find(p => p.page_number === currentPage);
-  const isAnalyzingCurrent = !currentResult && state.isAnalyzing;
+  const isAnalyzingCurrent = state.isAnalyzing;
 
   // Initialize overrides for newly analyzed pages
   useEffect(() => {
@@ -45,12 +48,29 @@ export function ReviewStep({ state, onApplyRedactions, onProceed }: ReviewStepPr
     }));
   };
 
+  const toggleExclusion = (fieldId: string) => {
+    setExcludedFields(prev => {
+      const next = new Set(prev);
+      if (next.has(fieldId)) {
+        next.delete(fieldId);
+      } else {
+        next.add(fieldId);
+        // Also ensure it's not redacted if excluded
+        setOverrides(ov => ({ ...ov, [fieldId]: false }));
+      }
+      return next;
+    });
+  };
+
   const redactAll = () => {
     if (!currentResult) return;
     setOverrides(prev => {
       const next = { ...prev };
       currentResult.pii_fields.forEach(f => {
-        next[`${currentPage}_${f.pii_type}_${f.value}`] = true;
+        const id = `${currentPage}_${f.pii_type}_${f.value}`;
+        if (!excludedFields.has(id)) {
+          next[id] = true;
+        }
       });
       return next;
     });
@@ -74,6 +94,18 @@ export function ReviewStep({ state, onApplyRedactions, onProceed }: ReviewStepPr
       onProceed();
     } finally {
       setIsExporting(false);
+    }
+  };
+
+  const handleJumpToOccurrence = (start: number) => {
+    const element = document.getElementById(`pii-${start}`);
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // Add a brief highlight effect
+      element.classList.add('ring-4', 'ring-primary', 'ring-offset-2', 'rounded-sm', 'transition-all');
+      setTimeout(() => {
+        element.classList.remove('ring-4', 'ring-primary', 'ring-offset-2');
+      }, 2000);
     }
   };
 
@@ -101,21 +133,48 @@ export function ReviewStep({ state, onApplyRedactions, onProceed }: ReviewStepPr
           </button>
         </div>
 
-        <div className="flex-1 max-w-xs mx-8">
-          <div className="h-2 bg-surface-container rounded-full overflow-hidden">
-            <div 
-              className="h-full bg-primary transition-all duration-300"
-              style={{ width: `${(state.analyzedCount / totalPages) * 100}%` }}
-            />
+        <div className="flex-1 max-w-lg mx-8">
+          <div className="flex items-center justify-center gap-6">
+            {!currentResult ? (
+              <div className="flex flex-col items-center gap-1">
+                <button
+                  onClick={() => onAnalyzePage(currentPage)}
+                  disabled={state.isAnalyzing}
+                  className="flex items-center gap-2 px-6 py-2 bg-primary text-on-primary rounded-full font-bold hover:bg-primary/90 transition-all hover:scale-105 active:scale-95 shadow-lg shadow-primary/20 disabled:opacity-50"
+                >
+                  <Brain className="w-5 h-5" />
+                  Scan & Detect Page
+                </button>
+                <p className="text-[10px] text-on-surface-variant font-medium">
+                  Trigger local LLM analysis for this page
+                </p>
+              </div>
+            ) : (
+              <div className="flex items-center gap-4 bg-surface-container-high rounded-2xl px-4 py-2 border border-outline-variant/50">
+                <div className="flex flex-col">
+                  <span className="text-[10px] font-bold text-primary uppercase tracking-wider">Analysis Complete</span>
+                  <span className="text-xs text-on-surface-variant font-medium">
+                    {currentResult.pii_fields.length} PII fields found
+                  </span>
+                </div>
+                <div className="w-px h-8 bg-outline-variant/30" />
+                <button
+                  onClick={() => onAnalyzePage(currentPage, true)}
+                  disabled={state.isAnalyzing}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-surface text-on-surface border border-outline-variant rounded-lg text-xs font-bold hover:bg-surface-container transition-colors disabled:opacity-50"
+                  title="Re-scan ignoring cache"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${state.isAnalyzing ? 'animate-spin' : ''}`} />
+                  Re-scan
+                </button>
+              </div>
+            )}
           </div>
-          <p className="text-xs text-center text-on-surface-variant mt-1 font-medium">
-            {state.analyzedCount} of {totalPages} pages analyzed
-          </p>
         </div>
 
         <button
           onClick={handleExport}
-          disabled={isExporting || state.analyzedCount < totalPages}
+          disabled={isExporting || state.analyzedCount === 0}
           className="flex items-center gap-2 px-6 py-2 bg-on-surface text-surface-container-lowest rounded-full font-medium hover:bg-on-surface-variant transition-colors disabled:opacity-50"
         >
           {isExporting ? (
@@ -135,6 +194,7 @@ export function ReviewStep({ state, onApplyRedactions, onProceed }: ReviewStepPr
               text={currentPageData.text}
               fields={currentResult?.pii_fields || []}
               redactionOverrides={overrides}
+              excludedFields={excludedFields}
               onToggleRedaction={toggleRedaction}
               pageNumber={currentPage}
             />
@@ -150,10 +210,13 @@ export function ReviewStep({ state, onApplyRedactions, onProceed }: ReviewStepPr
             pageNumber={currentPage}
             cacheHit={currentResult?.cache_hit || false}
             redactionOverrides={overrides}
+            excludedFields={excludedFields}
             onToggleRedaction={toggleRedaction}
+            onToggleExclusion={toggleExclusion}
             onRedactAll={redactAll}
             onKeepAll={keepAll}
             isAnalyzing={isAnalyzingCurrent}
+            onJumpToOccurrence={handleJumpToOccurrence}
           />
         </div>
       </div>

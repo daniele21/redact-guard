@@ -39,16 +39,13 @@ Each element must have:
 - "pii_type": one of [{allowed_types}]
 - "value": the exact text span as it appears in the document
 - "redacted_value": a replacement placeholder like "[REDACTED_NAME]", "[REDACTED_DATE]", etc.
-- "start": character offset where the value starts in the text (0-indexed)
-- "end": character offset where the value ends in the text (exclusive)
 
 ## Rules
 
 1. Extract the EXACT text span — do not paraphrase or summarize.
-2. Include start/end offsets when possible. If unsure, set both to null.
-3. Do NOT include information that is clearly public or non-personal.
-4. If no PII is found, return {{"pii_fields": []}}.
-5. Return ONLY valid JSON — no explanations, no markdown code blocks.
+2. Do NOT include information that is clearly public or non-personal.
+3. If no PII is found, return {{"pii_fields": []}}.
+4. Return ONLY valid JSON — no explanations, no markdown code blocks.
 """
 
 

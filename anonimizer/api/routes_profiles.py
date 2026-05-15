@@ -10,25 +10,6 @@ router = APIRouter()
 
 
 # ---------------------------------------------------------------------------
-# Profile listing and detail
-# ---------------------------------------------------------------------------
-
-@router.get("/profiles", response_model=list[ProfileSummary])
-def list_profiles():
-    """List all available PII detection profiles."""
-    return profile_service.list_profiles()
-
-
-@router.get("/profiles/{name}", response_model=ProfileDetail)
-def get_profile(name: str):
-    """Get full detail of a specific profile including all PII types."""
-    try:
-        return profile_service.load_profile(name)
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail=f"Profile '{name}' not found")
-
-
-# ---------------------------------------------------------------------------
 # Custom PII types CRUD
 # ---------------------------------------------------------------------------
 
@@ -54,3 +35,22 @@ def remove_custom_type(name: str):
     if not removed:
         raise HTTPException(status_code=404, detail=f"Custom type '{name}' not found")
     return {"removed": name}
+
+
+# ---------------------------------------------------------------------------
+# Profile listing and detail
+# ---------------------------------------------------------------------------
+
+@router.get("/profiles", response_model=list[ProfileSummary])
+def list_profiles():
+    """List all available PII detection profiles."""
+    return profile_service.list_profiles()
+
+
+@router.get("/profiles/{name}", response_model=ProfileDetail)
+def get_profile(name: str):
+    """Get full detail of a specific profile including all PII types."""
+    try:
+        return profile_service.load_profile(name)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Profile '{name}' not found")

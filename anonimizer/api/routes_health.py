@@ -35,3 +35,4 @@ def health_check():
         model=config.llm_model,
         cache_stats=cache_manager.get_stats()
     )
+

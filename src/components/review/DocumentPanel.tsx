@@ -6,6 +6,7 @@ interface DocumentPanelProps {
   text: string;
   fields: PIIField[];
   redactionOverrides: Record<string, boolean>;
+  excludedFields: Set<string>;
   onToggleRedaction: (fieldId: string) => void;
   pageNumber: number;
 }
@@ -14,16 +15,15 @@ export function DocumentPanel({
   text, 
   fields, 
   redactionOverrides, 
+  excludedFields,
   onToggleRedaction,
   pageNumber 
 }: DocumentPanelProps) {
   
-  // To replace text with React components, we need to split the string
-  // based on the start/end offsets.
-  // We sort fields by their start offset. If start/end are null, we can't reliably
-  // highlight inline, so we just filter them out for the text panel (they still appear in sidebar).
-  
-  const validFields = fields.filter(f => f.start !== null && f.end !== null);
+  // Filter out excluded fields
+  const activeFields = fields.filter(f => !excludedFields.has(`${pageNumber}_${f.pii_type}_${f.value}`));
+
+  const validFields = activeFields.filter(f => f.start !== null && f.end !== null);
   validFields.sort((a, b) => (a.start as number) - (b.start as number));
 
   const renderText = () => {
@@ -53,12 +53,13 @@ export function DocumentPanel({
       const isRedacted = redactionOverrides[fieldId] !== false;
 
       elements.push(
-        <PIIHighlight 
-          key={`hl-${i}`}
-          field={field}
-          isRedacted={isRedacted}
-          onToggle={() => onToggleRedaction(fieldId)}
-        />
+        <div key={`hl-${i}`} id={`pii-${field.start}`} className="inline">
+          <PIIHighlight 
+            field={field}
+            isRedacted={isRedacted}
+            onToggle={() => onToggleRedaction(fieldId)}
+          />
+        </div>
       );
 
       lastIndex = end;

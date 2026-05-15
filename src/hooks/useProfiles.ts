@@ -11,18 +11,29 @@ export function useProfiles() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
-    try {
-      const [profilesData, customData] = await Promise.all([
-        api.getProfiles(),
-        api.getCustomTypes()
-      ]);
-      setProfiles(profilesData);
-      setCustomTypes(customData);
-    } catch (err: any) {
-      setError(err.message || 'Failed to load profiles');
-    } finally {
-      setLoading(false);
-    }
+    
+    // Fetch profiles and custom types separately to be resilient to partial failures
+    const fetchProfiles = async () => {
+      try {
+        const data = await api.getProfiles();
+        setProfiles(data);
+      } catch (err: any) {
+        console.error('Failed to load profiles:', err);
+        setError(prev => prev || 'Failed to load profiles');
+      }
+    };
+
+    const fetchCustomTypes = async () => {
+      try {
+        const data = await api.getCustomTypes();
+        setCustomTypes(data);
+      } catch (err: any) {
+        console.error('Failed to load custom types:', err);
+      }
+    };
+
+    await Promise.all([fetchProfiles(), fetchCustomTypes()]);
+    setLoading(false);
   }, []);
 
   useEffect(() => {

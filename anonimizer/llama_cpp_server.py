@@ -41,12 +41,28 @@ DEFAULT_MODEL_PATH = (
 
 
 def _json_response(handler: BaseHTTPRequestHandler, status: int, payload: dict[str, Any]) -> None:
-    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-    handler.send_response(status)
-    handler.send_header("Content-Type", "application/json; charset=utf-8")
-    handler.send_header("Content-Length", str(len(body)))
-    handler.end_headers()
-    handler.wfile.write(body)
+    """
+    Invia una risposta JSON al client.
+    Gestisce BrokenPipeError / ConnectionResetError che possono capitare se il
+    client chiude la connessione prematuramente (es. polling interrotto o timeout).
+
+    Cattura OSError come base-class perché diverse sotto-eccezioni di socket
+    (Errno 32, 54, 104) possono emergere a livelli diversi dello stack stdlib.
+    """
+    try:
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        handler.send_response(status)
+        handler.send_header("Content-Type", "application/json; charset=utf-8")
+        handler.send_header("Content-Length", str(len(body)))
+        handler.end_headers()
+        handler.wfile.write(body)
+    except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, OSError) as exc:
+        # Il client ha chiuso la connessione prima che il server potesse
+        # completare la scrittura. Logging a livello DEBUG per evitare
+        # un flood di traceback nel terminale.
+        logger.debug("Client disconnected before response could be sent: %s", exc)
+    except Exception as exc:
+        logger.error("Unexpected error sending JSON response: %s", exc)
 
 
 def _read_json(handler: BaseHTTPRequestHandler) -> dict[str, Any]:
@@ -278,6 +294,18 @@ def _load_llm(args: argparse.Namespace) -> Any:
 
 
 class NemotronLlamaCppServer(ThreadingHTTPServer):
+    """
+    Server HTTP locale per il modello Nemotron.
+
+    Sovrascrive `handle_error` per silenziare i BrokenPipeError che
+    il ThreadingHTTPServer normalmente stampa su stderr, generando
+    un flood di traceback inutili quando i client di polling chiudono
+    la connessione prima che il server risponda.
+    """
+
+    # Permette il riutilizzo rapido della porta dopo un restart
+    allow_reuse_address = True
+
     def __init__(
         self,
         server_address: tuple[str, int],
@@ -304,13 +332,62 @@ class NemotronLlamaCppServer(ThreadingHTTPServer):
         # sullo stesso oggetto Llama. Meglio serializzare.
         self.generation_lock = threading.Lock()
 
+        # Tracking stato inferenza
+        self.current_status = {
+            "active": False,
+            "phase": "idle",  # idle, prompt_eval, generating
+            "tokens_generated": 0,
+            "max_tokens": 0,
+            "started_at": 0,
+            "last_token_at": 0,
+            "tokens_per_second": 0.0,
+            "model": self.model_name,
+            "last_content": "",
+        }
+
+    def handle_error(self, request: Any, client_address: Any) -> None:
+        """
+        Silenzia i BrokenPipeError / ConnectionResetError che il
+        ThreadingHTTPServer base stamperebbe come traceback completi.
+        Solo errori imprevisti vengono effettivamente loggati.
+        """
+        exc_type = sys.exc_info()[0]
+        if exc_type and issubclass(exc_type, (BrokenPipeError, ConnectionResetError, ConnectionAbortedError)):
+            logger.debug("Client %s disconnected (suppressed %s)", client_address, exc_type.__name__)
+            return
+        # Per qualsiasi altro errore, usa il comportamento di default
+        super().handle_error(request, client_address)
+
 
 class NemotronHandler(BaseHTTPRequestHandler):
+    """
+    Handler HTTP per le richieste al server Nemotron.
+
+    Sovrascrive `handle_one_request` per catturare BrokenPipeError
+    che può emergere *dopo* che il nostro codice ha finito di scrivere
+    (es. durante il flush automatico dello stdlib).
+    """
+
     server_version = "NemotronLlamaCppPython/1.1"
 
     @property
     def app(self) -> NemotronLlamaCppServer:
         return self.server  # type: ignore[return-value]
+
+    def handle_one_request(self) -> None:
+        """Wrappa il ciclo di gestione richiesta per catturare errori di socket."""
+        try:
+            super().handle_one_request()
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+            # Il client ha chiuso la connessione. Nessuna azione necessaria.
+            self.close_connection = True
+
+    def log_request(self, code: int | str = "-", size: int | str = "-") -> None:
+        """Override che cattura errori di socket durante il logging."""
+        try:
+            super().log_request(code, size)
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+            pass
 
     def do_GET(self) -> None:
         path = urlparse(self.path).path.rstrip("/") or "/"
@@ -353,6 +430,16 @@ class NemotronHandler(BaseHTTPRequestHandler):
                     ],
                 },
             )
+            return
+
+        if path in {"/api/v1/status", "/status"}:
+            status = dict(self.app.current_status)
+            if status["active"] and status["phase"] == "generating" and status["tokens_generated"] > 0:
+                elapsed = time.perf_counter() - status["started_at"]
+                if elapsed > 0:
+                    status["tokens_per_second"] = status["tokens_generated"] / elapsed
+                
+            _json_response(self, 200, status)
             return
 
         _json_response(self, 404, {"error": f"Unknown route: {self.path}"})
@@ -429,33 +516,93 @@ class NemotronHandler(BaseHTTPRequestHandler):
             elif self.app.force_json:
                 kwargs["response_format"] = {"type": "json_object"}
 
-            logger.debug("Invoking create_chat_completion with arguments: %s", 
-                         json.dumps({k: v for k, v in kwargs.items() if k != "messages"}, indent=2))
-            
             with self.app.generation_lock:
-                try:
-                    raw_response = self.app.llm.create_chat_completion(**kwargs)
-                except TypeError as exc:
-                    if "chat_template_kwargs" in str(exc):
-                        logger.warning("'chat_template_kwargs' is not supported by your current llama-cpp-python version. Retrying without it...")
-                        kwargs.pop("chat_template_kwargs", None)
-                        raw_response = self.app.llm.create_chat_completion(**kwargs)
-                    else:
-                        raise
+                # Update status for prompt evaluation
+                self.app.current_status.update({
+                    "active": True,
+                    "phase": "prompt_eval",
+                    "tokens_generated": 0,
+                    "max_tokens": int(max_tokens) if max_tokens else 0,
+                    "started_at": time.perf_counter(),
+                })
+
+                # Use streaming to track progress, but reconstruct full response
+                kwargs["stream"] = True
+                kwargs.pop("chat_template_kwargs", None)
+                
+                stream = self.app.llm.create_chat_completion(**kwargs)
+                
+                full_content = ""
+                raw_response = None
+                
+                # Visual logging setup
+                print(f"\n\033[94m[{time.strftime('%H:%M:%S')}] LLM inference started...\033[0m", flush=True)
+                is_thinking = False
+
+                for chunk in stream:
+                    if self.app.current_status["phase"] == "prompt_eval":
+                        self.app.current_status["phase"] = "generating"
+                        self.app.current_status["started_at"] = time.perf_counter()
+                        print(f"\033[90mPrompt evaluated. Generating response:\033[0m\n", end="", flush=True)
+
+                    delta = chunk["choices"][0].get("delta", {})
+                    content = delta.get("content", "")
+                    if content:
+                        # Real-time console logging
+                        if "<think>" in content:
+                            is_thinking = True
+                            print("\n\033[93m[THINKING]\033[0m ", end="", flush=True)
+                        
+                        # Print the token
+                        if is_thinking:
+                            # Dim color for thinking
+                            print(f"\033[90m{content}\033[0m", end="", flush=True)
+                        else:
+                            print(content, end="", flush=True)
+
+                        if "</think>" in content:
+                            is_thinking = False
+                            print("\n\033[92m[RESPONSE]\033[0m ", end="", flush=True)
+
+                        full_content += content
+                        self.app.current_status["tokens_generated"] += 1
+                        self.app.current_status["last_token_at"] = time.perf_counter()
+                        
+                        # Update preview (last 100 chars)
+                        self.app.current_status["last_content"] = (full_content + content)[-100:]
+                    
+                    if not raw_response:
+                        raw_response = chunk
+                
+                print("\n\033[94m[Inference Complete]\033[0m\n", flush=True)
+                
+                # Reconstruct a final response object compatible with non-streamed output
+                if raw_response:
+                    raw_response["choices"][0]["message"] = {"role": "assistant", "content": full_content}
+                    # Mock usage since stream doesn't always provide it accurately in all versions
+                    raw_response["usage"] = {
+                        "prompt_tokens": 0, # Difficult to get during stream without extra call
+                        "completion_tokens": self.app.current_status["tokens_generated"],
+                        "total_tokens": self.app.current_status["tokens_generated"]
+                    }
 
             finished_at = time.perf_counter()
-
         except json.JSONDecodeError as exc:
+            self.app.current_status["active"] = False
             _json_response(self, 400, {"error": f"Invalid JSON request: {exc}"})
             return
         except ValueError as exc:
+            self.app.current_status["active"] = False
             _json_response(self, 400, {"error": str(exc)})
             return
         except Exception as exc:
+            self.app.current_status["active"] = False
             import traceback
             logger.error("Exception occurred during inference: %s", traceback.format_exc())
             _json_response(self, 500, {"error": f"Nemotron inference failed: {exc}"})
             return
+        finally:
+            self.app.current_status["active"] = False
 
         if not isinstance(raw_response, dict):
             _json_response(self, 500, {"error": "llama-cpp-python returned a non-object response."})
@@ -552,10 +699,10 @@ def parse_args() -> argparse.Namespace:
         default=os.getenv("LLAMA_CPP_USE_MMAP", "true").lower() in {"1", "true", "yes", "on"},
     )
     parser.add_argument(
-    "--enable-thinking",
-    action=argparse.BooleanOptionalAction,
-    default=os.getenv("LLAMA_CPP_ENABLE_THINKING", "true").lower() in {"1", "true", "yes", "on"},
-)
+        "--enable-thinking",
+        action=argparse.BooleanOptionalAction,
+        default=os.getenv("LLAMA_CPP_ENABLE_THINKING", str(llm_conf.get("enable_thinking", "true"))).lower() in {"1", "true", "yes", "on"},
+    )
 
     parser.add_argument(
         "--show-thinking",

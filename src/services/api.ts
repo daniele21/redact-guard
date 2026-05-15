@@ -19,7 +19,7 @@ export const api = {
     return res.json();
   },
 
-  upload: async (file: File, profile: string = 'healthcare'): Promise<UploadResponse> => {
+  upload: async (file: File, profile: string = 'general'): Promise<UploadResponse> => {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('profile', profile);
@@ -36,8 +36,9 @@ export const api = {
     return res.json();
   },
 
-  analyzePage: async (docId: string, pageNum: number): Promise<PageAnalysisResult> => {
-    const res = await fetch(`${API_BASE}/analyze/${docId}/page/${pageNum}`, {
+  analyzePage: async (docId: string, pageNum: number, force: boolean = false): Promise<PageAnalysisResult> => {
+    const url = `${API_BASE}/analyze/${docId}/page/${pageNum}${force ? '?force=true' : ''}`;
+    const res = await fetch(url, {
       method: 'POST'
     });
     if (!res.ok) throw new Error(`Failed to analyze page ${pageNum}`);

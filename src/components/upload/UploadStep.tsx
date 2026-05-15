@@ -1,6 +1,10 @@
 import React, { useCallback, useState } from 'react';
-import { Upload, File as FileIcon, X, AlertCircle } from 'lucide-react';
+import { Upload, File as FileIcon, X, AlertCircle, Info, ChevronRight } from 'lucide-react';
 import { useProfiles } from '../../hooks/useProfiles';
+import { ProfileInfoModal } from './ProfileInfoModal';
+import { LandingHero } from '../landing/LandingHero';
+import { LandingHowItWorks } from '../landing/LandingHowItWorks';
+import { LandingFooter } from '../landing/LandingFooter';
 
 interface UploadStepProps {
   onAnalyze: (file: File, profile: string) => void;
@@ -11,7 +15,8 @@ export function UploadStep({ onAnalyze, isUploading }: UploadStepProps) {
   const [dragActive, setDragActive] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [profile, setProfile] = useState<string>('healthcare');
+  const [profile, setProfile] = useState<string>('general');
+  const [selectedInfoProfile, setSelectedInfoProfile] = useState<string | null>(null);
   const { profiles } = useProfiles();
 
   const handleDrag = useCallback((e: React.DragEvent) => {
@@ -61,148 +66,211 @@ export function UploadStep({ onAnalyze, isUploading }: UploadStepProps) {
   };
 
   return (
-    <div className="max-w-2xl mx-auto space-y-8">
-      {/* Profile Selector */}
-      <div className="bg-surface-container p-6 rounded-2xl border border-outline-variant">
-        <label className="block text-sm font-semibold text-on-surface mb-2">
-          Select PII Detection Profile
-        </label>
-        <p className="text-sm text-on-surface-variant mb-4">
-          Choose the domain that best matches your document. This optimizes the AI for specific sensitive data types.
-        </p>
-        <div className="grid grid-cols-2 gap-3">
-          {profiles.map(p => (
-            <label 
-              key={p.name}
-              className={`
-                flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all
-                ${profile === p.name 
-                  ? 'bg-primary/10 border-primary text-primary shadow-sm' 
-                  : 'bg-surface border-outline-variant text-on-surface hover:border-primary/50'}
-              `}
-            >
-              <input 
-                type="radio" 
-                name="profile" 
-                value={p.name} 
-                checked={profile === p.name}
-                onChange={(e) => setProfile(e.target.value)}
-                className="hidden"
-              />
-              <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center
-                ${profile === p.name ? 'border-primary' : 'border-outline'}
-              `}>
-                {profile === p.name && <div className="w-2 h-2 rounded-full bg-primary" />}
+    <div className="flex flex-col gap-0">
+      {/* Hero Section */}
+      <LandingHero />
+
+      {/* Main Tool Section */}
+      <section className="py-12 px-4 max-w-5xl mx-auto w-full">
+        <div className="bg-surface-container-lowest border border-outline-variant/50 rounded-[2.5rem] shadow-2xl shadow-primary/5 overflow-hidden">
+          <div className="grid lg:grid-cols-2">
+            
+            {/* Left: Configuration */}
+            <div className="p-8 lg:p-12 bg-surface-container-low/50 border-r border-outline-variant/30">
+              <div className="mb-8">
+                <h2 className="text-xl font-bold text-on-surface mb-2 flex items-center gap-2">
+                  <span className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center text-sm">1</span>
+                  Configure Detection
+                </h2>
+                <p className="text-sm text-on-surface-variant">
+                  Select a profile to optimize the AI for your specific document type.
+                </p>
               </div>
-              <span className="font-medium capitalize">{p.display_name}</span>
-            </label>
-          ))}
-        </div>
-      </div>
 
-      {/* Dropzone */}
-      <div 
-        onDragEnter={handleDrag}
-        onDragLeave={handleDrag}
-        onDragOver={handleDrag}
-        onDrop={handleDrop}
-        className={`
-          relative border-2 border-dashed rounded-3xl p-12 text-center transition-all duration-300
-          ${dragActive 
-            ? 'border-primary bg-primary/5 scale-[1.02]' 
-            : file 
-              ? 'border-success/50 bg-success/5' 
-              : 'border-outline-variant bg-surface hover:bg-surface-container-lowest hover:border-outline'
-          }
-        `}
-      >
-        <input
-          type="file"
-          id="file-upload"
-          className="hidden"
-          accept=".pdf"
-          onChange={handleChange}
-          disabled={isUploading}
-        />
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 gap-3">
+                  {profiles.map(p => (
+                    <div key={p.name} className="relative group">
+                      <label 
+                        className={`
+                          flex items-center gap-3 p-4 h-full rounded-2xl border transition-all duration-300
+                          ${isUploading ? 'opacity-50 pointer-events-none' : 'cursor-pointer'}
+                          ${profile === p.name 
+                            ? 'bg-primary/5 border-primary text-primary shadow-sm ring-1 ring-primary/20' 
+                            : 'bg-surface border-outline-variant/50 text-on-surface hover:border-primary/40 hover:bg-surface-container-lowest'}
+                        `}
+                      >
+                        <input 
+                          type="radio" 
+                          name="profile" 
+                          value={p.name} 
+                          checked={profile === p.name}
+                          onChange={(e) => setProfile(e.target.value)}
+                          disabled={isUploading}
+                          className="hidden"
+                        />
+                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors
+                          ${profile === p.name ? 'border-primary' : 'border-outline'}
+                        `}>
+                          {profile === p.name && <div className="w-2.5 h-2.5 rounded-full bg-primary animate-scale-in" />}
+                        </div>
+                        <div className="flex-grow min-w-0">
+                          <span className="font-semibold capitalize block truncate">{p.display_name}</span>
+                          <span className="text-[11px] opacity-70 block mt-0.5">{p.pii_type_count} categories</span>
+                        </div>
+                      </label>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedInfoProfile(p.name);
+                        }}
+                        disabled={isUploading}
+                        className={`
+                          absolute top-3 right-3 p-1.5 rounded-full transition-all
+                          ${profile === p.name ? 'text-primary hover:bg-primary/10' : 'text-outline hover:bg-surface-container-high'}
+                          ${isUploading ? 'opacity-0' : ''}
+                        `}
+                        title="View profile details"
+                      >
+                        <Info className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
 
-        {!file ? (
-          <label 
-            htmlFor="file-upload"
-            className="cursor-pointer flex flex-col items-center gap-4"
-          >
-            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-colors
-              ${dragActive ? 'bg-primary text-white' : 'bg-surface-container-high text-on-surface-variant'}
-            `}>
-              <Upload className="w-8 h-8" />
+              {selectedInfoProfile && (
+                <ProfileInfoModal 
+                  profileName={selectedInfoProfile} 
+                  onClose={() => setSelectedInfoProfile(null)} 
+                />
+              )}
             </div>
-            <div>
-              <p className="text-xl font-medium text-on-surface mb-1">
-                Drag and drop your PDF here
-              </p>
-              <p className="text-on-surface-variant">
-                or <span className="text-primary hover:underline">browse files</span> (max 50MB)
-              </p>
+
+            {/* Right: Upload Area */}
+            <div className="p-8 lg:p-12 flex flex-col">
+              <div className="mb-8">
+                <h2 className="text-xl font-bold text-on-surface mb-2 flex items-center gap-2">
+                  <span className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center text-sm">2</span>
+                  Upload Document
+                </h2>
+                <p className="text-sm text-on-surface-variant">
+                  Your PDF will be analyzed locally. No data leaves this device.
+                </p>
+              </div>
+
+              <div 
+                onDragEnter={handleDrag}
+                onDragLeave={handleDrag}
+                onDragOver={handleDrag}
+                onDrop={handleDrop}
+                className={`
+                  flex-grow relative border-2 border-dashed rounded-[2rem] p-8 text-center transition-all duration-500
+                  ${isUploading ? 'opacity-60 pointer-events-none' : ''}
+                  ${dragActive 
+                    ? 'border-primary bg-primary/5 scale-[1.01]' 
+                    : file 
+                      ? 'border-success/40 bg-success/5' 
+                      : 'border-outline-variant bg-surface-container-lowest hover:border-primary/30 hover:bg-primary/[0.02]'
+                  }
+                `}
+              >
+                <input
+                  type="file"
+                  id="file-upload"
+                  className="hidden"
+                  accept=".pdf"
+                  onChange={handleChange}
+                  disabled={isUploading}
+                />
+
+                {!file ? (
+                  <label 
+                    htmlFor="file-upload"
+                    className="cursor-pointer h-full flex flex-col items-center justify-center gap-5 min-h-[200px]"
+                  >
+                    <div className={`w-20 h-20 rounded-3xl flex items-center justify-center transition-all duration-500
+                      ${dragActive ? 'bg-primary text-white shadow-xl shadow-primary/20 rotate-6' : 'bg-surface-container-high text-on-surface-variant'}
+                    `}>
+                      <Upload className="w-10 h-10" />
+                    </div>
+                    <div>
+                      <p className="text-lg font-bold text-on-surface mb-1">
+                        Select a PDF document
+                      </p>
+                      <p className="text-sm text-on-surface-variant">
+                        Drag and drop or <span className="text-primary font-semibold hover:underline">browse files</span>
+                      </p>
+                    </div>
+                  </label>
+                ) : (
+                  <div className="h-full flex flex-col items-center justify-center gap-6 min-h-[200px] animate-fade-in">
+                    <div className="w-20 h-20 rounded-3xl bg-success/10 text-success flex items-center justify-center shadow-lg shadow-success/10">
+                      <FileIcon className="w-10 h-10" />
+                    </div>
+                    <div>
+                      <p className="text-lg font-bold text-on-surface truncate max-w-[240px] mx-auto">
+                        {file.name}
+                      </p>
+                      <p className="text-sm text-on-surface-variant mt-1">
+                        {(file.size / 1024 / 1024).toFixed(2)} MB
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setFile(null)}
+                      className="text-xs font-semibold text-outline hover:text-error transition-colors flex items-center gap-1.5 py-1.5 px-3 rounded-full hover:bg-error/5"
+                      disabled={isUploading}
+                    >
+                      <X className="w-3.5 h-3.5" /> Remove file
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {error && (
+                <div className="mt-4 flex items-center gap-2 text-error bg-error/10 p-4 rounded-2xl animate-shake">
+                  <AlertCircle className="w-5 h-5 shrink-0" />
+                  <p className="text-sm font-semibold">{error}</p>
+                </div>
+              )}
+
+              <div className="mt-8">
+                <button
+                  onClick={handleSubmit}
+                  disabled={!file || isUploading}
+                  className={`
+                    w-full py-4 rounded-2xl text-lg font-bold flex items-center justify-center gap-3 transition-all duration-300
+                    ${!file 
+                      ? 'bg-surface-container-high text-outline cursor-not-allowed' 
+                      : isUploading
+                        ? 'bg-primary/80 text-white cursor-wait'
+                        : 'bg-primary text-on-primary hover:bg-primary-container shadow-xl shadow-primary/20 hover:-translate-y-1'
+                    }
+                  `}
+                >
+                  {isUploading ? (
+                    <>
+                      <div className="w-5 h-5 border-3 border-white/30 border-t-white rounded-full animate-spin" />
+                      <span>Uploading & Extracting...</span>
+                    </>
+                  ) : (
+                    <>
+                      Upload & Continue
+                      <ChevronRight className="w-5 h-5" />
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
-          </label>
-        ) : (
-          <div className="flex flex-col items-center gap-6">
-            <div className="w-16 h-16 rounded-2xl bg-success/10 text-success flex items-center justify-center">
-              <FileIcon className="w-8 h-8" />
-            </div>
-            <div>
-              <p className="text-xl font-medium text-on-surface truncate max-w-sm mx-auto">
-                {file.name}
-              </p>
-              <p className="text-on-surface-variant mt-1">
-                {(file.size / 1024 / 1024).toFixed(2)} MB
-              </p>
-            </div>
-            <button
-              onClick={() => setFile(null)}
-              className="text-sm text-outline hover:text-error transition-colors flex items-center gap-1"
-              disabled={isUploading}
-            >
-              <X className="w-4 h-4" /> Remove file
-            </button>
           </div>
-        )}
-      </div>
-
-      {error && (
-        <div className="flex items-center gap-2 text-error bg-error/10 p-4 rounded-xl">
-          <AlertCircle className="w-5 h-5 shrink-0" />
-          <p className="font-medium">{error}</p>
         </div>
-      )}
+      </section>
 
-      {/* Action */}
-      <div className="flex justify-center pt-4">
-        <button
-          onClick={handleSubmit}
-          disabled={!file || isUploading}
-          className={`
-            px-8 py-4 rounded-full text-lg font-semibold flex items-center gap-3 transition-all
-            ${!file 
-              ? 'bg-surface-container-high text-outline cursor-not-allowed' 
-              : isUploading
-                ? 'bg-primary/80 text-white cursor-wait'
-                : 'bg-primary text-on-primary hover:bg-primary-container shadow-lg hover:shadow-xl hover:-translate-y-0.5'
-            }
-          `}
-        >
-          {isUploading ? (
-            <>
-              <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              Processing Document...
-            </>
-          ) : (
-            <>
-              Analyze Document
-              <span className="text-primary-container-lowest">→</span>
-            </>
-          )}
-        </button>
-      </div>
+      {/* How it works section */}
+      <LandingHowItWorks />
+
+      {/* Footer */}
+      <LandingFooter />
     </div>
   );
 }

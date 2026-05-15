@@ -20,8 +20,12 @@ export function Navbar({ onReset }: NavbarProps) {
               className="flex items-center gap-3 cursor-pointer group"
               onClick={onReset}
             >
-              <div className="w-10 h-10 bg-primary/10 text-primary rounded-xl flex items-center justify-center group-hover:bg-primary/20 transition-all duration-300">
-                <Shield className="w-6 h-6" />
+              <div className="w-10 h-10 bg-primary/5 rounded-xl flex items-center justify-center group-hover:bg-primary/10 transition-all duration-300 overflow-hidden p-1.5">
+                <img 
+                  src={theme === 'light' ? '/favicon.png' : '/favicon-dark.png'} 
+                  alt="RedactGuard Logo" 
+                  className="w-full h-full object-contain" 
+                />
               </div>
               <div>
                 <h1 className="text-xl font-bold text-on-surface tracking-tight leading-none transition-colors duration-300">

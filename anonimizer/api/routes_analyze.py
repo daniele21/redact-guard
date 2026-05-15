@@ -10,7 +10,7 @@ class BatchAnalysisResponse(BaseModel):
     pages: list[PageAnalysisResult]
 
 @router.post("/analyze/{doc_id}/page/{page_number}", response_model=PageAnalysisResult)
-def analyze_page(doc_id: str, page_number: int):
+def analyze_page(doc_id: str, page_number: int, force: bool = False):
     """Analyze a single page of a document for PII."""
     session = get_session(doc_id)
     if not session:
@@ -22,7 +22,7 @@ def analyze_page(doc_id: str, page_number: int):
         raise HTTPException(status_code=404, detail=f"Page {page_number} not found in document.")
 
     # Call the detector
-    result = detect_pii_for_page(page_to_analyze, session.profile_name)
+    result = detect_pii_for_page(page_to_analyze, session.profile_name, force=force)
     
     # Store result in session
     session.pii_results[page_number] = result.pii_fields

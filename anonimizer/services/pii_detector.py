@@ -44,14 +44,14 @@ def call_local_llm(prompt: str, user_text: str) -> str:
         logger.error(f"LLM request failed: {e}")
         raise
 
-def detect_pii_for_page(page: PageMarkdown, profile_name: str) -> PageAnalysisResult:
+def detect_pii_for_page(page: PageMarkdown, profile_name: str, force: bool = False) -> PageAnalysisResult:
     """
     Analyze a single page for PII. Uses the LLM cache layer.
     """
     system_prompt = build_system_prompt(profile_name)
     cache_key = build_llm_cache_key(system_prompt, page.text, config.llm_model)
 
-    cached_raw = cache_manager.get_llm(cache_key)
+    cached_raw = cache_manager.get_llm(cache_key) if not force else None
     cache_hit = False
 
     if cached_raw is not None:
@@ -59,7 +59,10 @@ def detect_pii_for_page(page: PageMarkdown, profile_name: str) -> PageAnalysisRe
         cache_hit = True
         logger.info(f"LLM Cache HIT for page {page.page_number}")
     else:
-        logger.info(f"LLM Cache MISS for page {page.page_number}. Calling model...")
+        if force:
+            logger.info(f"LLM Force Re-scan for page {page.page_number}. Bypassing cache...")
+        else:
+            logger.info(f"LLM Cache MISS for page {page.page_number}. Calling model...")
         raw_response = call_local_llm(system_prompt, page.text)
         cache_manager.set_llm(cache_key, raw_response)
 
@@ -67,36 +70,54 @@ def detect_pii_for_page(page: PageMarkdown, profile_name: str) -> PageAnalysisRe
     raw_fields = parsed_data.get("pii_fields", [])
 
     pii_fields: list[PIIField] = []
+    seen_spans: set[tuple[int, int]] = set()
     
-    # Coerce offsets and reconstruct redacted_text
+    # Process each unique value identified by the LLM
     for field in raw_fields:
         value = field.get("value", "")
         if not value:
             continue
             
-        start = field.get("start")
-        end = field.get("end")
+        # Programmatically find ALL occurrences of this value in the text
+        # This is more robust than relying on the LLM's first mention
+        import re
+        from utils.span_utils import _find_whitespace_normalized_span
         
-        # Verify and fix offsets
-        real_span = _find_whitespace_normalized_span(page.text, value, start, end)
-        if real_span:
-            real_start, real_end = real_span
+        # We search globally for this value to catch all instances
+        search_pos = 0
+        while search_pos < len(page.text):
+            # We use the existing span utility but we don't pass hints anymore
+            # as they are no longer in the prompt.
+            real_span = _find_whitespace_normalized_span(page.text[search_pos:], value)
+            if not real_span:
+                break
+                
+            start_in_window, end_in_window = real_span
+            real_start = search_pos + start_in_window
+            real_end = search_pos + end_in_window
             
-            # Reconstruct redaction value if not present
-            redacted_val = field.get("redacted_value")
-            if not redacted_val:
-                pii_type = field.get("pii_type", "UNKNOWN")
-                redacted_val = f"[REDACTED_{pii_type.upper()}]"
+            span = (real_start, real_end)
+            if span not in seen_spans:
+                seen_spans.add(span)
+                
+                # Reconstruct redaction value if not present
+                redacted_val = field.get("redacted_value")
+                if not redacted_val:
+                    pii_type = field.get("pii_type", "UNKNOWN")
+                    redacted_val = f"[REDACTED_{pii_type.upper()}]"
 
-            pii_fields.append(PIIField(
-                field_name=field.get("field_name", "Unknown"),
-                field_description=field.get("field_description", ""),
-                pii_type=field.get("pii_type", "unknown"),
-                value=value,
-                redacted_value=redacted_val,
-                start=real_start,
-                end=real_end
-            ))
+                pii_fields.append(PIIField(
+                    field_name=field.get("field_name", "Unknown"),
+                    field_description=field.get("field_description", ""),
+                    pii_type=field.get("pii_type", "unknown"),
+                    value=page.text[real_start:real_end], # Use exact text from doc
+                    redacted_value=redacted_val,
+                    start=real_start,
+                    end=real_end
+                ))
+            
+            # Move forward to find next occurrence
+            search_pos = real_end
 
     # Reconstruct redacted text by applying all redactions
     # (Just a preview - true redaction engine does it later)

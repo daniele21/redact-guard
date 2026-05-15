@@ -14,7 +14,7 @@ router = APIRouter()
 @router.post("/upload", response_model=UploadResponse)
 async def upload_document(
     file: UploadFile = File(...),
-    profile: str = Form(default="healthcare"),
+    profile: str = Form(default="general"),
 ):
     # Validate profile exists
     try:

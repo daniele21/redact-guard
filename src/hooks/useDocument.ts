@@ -10,6 +10,7 @@ export interface DocumentState {
   pages: UploadResponse['pages'];
   analysisResults: Record<number, PageAnalysisResult>;
   redactedPages: RedactedPage[];
+  isUploading: boolean;
   isAnalyzing: boolean;
   analyzedCount: number;
 }
@@ -22,12 +23,24 @@ export function useDocument() {
     pages: [],
     analysisResults: {},
     redactedPages: [],
+    isUploading: false,
     isAnalyzing: false,
     analyzedCount: 0,
   });
 
-  const uploadAndAnalyze = async (file: File, profile: string) => {
+  const upload = async (file: File, profile: string) => {
     try {
+      // 0. Start uploading
+      setState(prev => ({ 
+        ...prev, 
+        isUploading: true,
+        docId: null,
+        pages: [],
+        analysisResults: {},
+        redactedPages: [],
+        analyzedCount: 0
+      }));
+
       // 1. Upload the file
       const uploadRes = await api.upload(file, profile);
       
@@ -36,39 +49,42 @@ export function useDocument() {
         docId: uploadRes.doc_id,
         profile: uploadRes.profile,
         pages: uploadRes.pages,
-        isAnalyzing: true,
-        analyzedCount: 0,
-        analysisResults: {},
-        redactedPages: []
+        isUploading: false,
       }));
       
       setStep('review');
-
-      // 2. Sequential analysis per page (auto-batch behavior from frontend)
-      // This allows updating the UI progressively.
-      const docId = uploadRes.doc_id;
-      for (const page of uploadRes.pages) {
-        try {
-          const result = await api.analyzePage(docId, page.page_number);
-          setState(prev => ({
-            ...prev,
-            analyzedCount: prev.analyzedCount + 1,
-            analysisResults: {
-              ...prev.analysisResults,
-              [page.page_number]: result
-            }
-          }));
-        } catch (err) {
-          console.error(`Error analyzing page ${page.page_number}:`, err);
-          setState(prev => ({ ...prev, analyzedCount: prev.analyzedCount + 1 }));
-        }
-      }
-      
-      setState(prev => ({ ...prev, isAnalyzing: false }));
-
     } catch (err) {
       console.error('Upload failed:', err);
+      setState(prev => ({ ...prev, isUploading: false }));
       throw err;
+    }
+  };
+
+  const analyzePage = async (pageNumber: number, force: boolean = false) => {
+    if (!state.docId) return;
+
+    setState(prev => ({ 
+      ...prev, 
+      isAnalyzing: true,
+    }));
+
+    try {
+      const result = await api.analyzePage(state.docId, pageNumber, force);
+      setState(prev => {
+        const isNew = !prev.analysisResults[pageNumber];
+        return {
+          ...prev,
+          analyzedCount: isNew ? prev.analyzedCount + 1 : prev.analyzedCount,
+          analysisResults: {
+            ...prev.analysisResults,
+            [pageNumber]: result
+          }
+        };
+      });
+    } catch (err) {
+      console.error(`Error analyzing page ${pageNumber}:`, err);
+    } finally {
+      setState(prev => ({ ...prev, isAnalyzing: false }));
     }
   };
 
@@ -94,6 +110,7 @@ export function useDocument() {
       pages: [],
       analysisResults: {},
       redactedPages: [],
+      isUploading: false,
       isAnalyzing: false,
       analyzedCount: 0,
     });
@@ -103,7 +120,8 @@ export function useDocument() {
     step,
     setStep,
     state,
-    uploadAndAnalyze,
+    upload,
+    analyzePage,
     applyRedactions,
     reset
   };

@@ -8,7 +8,7 @@ import { useDocument } from './hooks/useDocument';
 import { api } from './services/api';
 
 function App() {
-  const { step, setStep, state, uploadAndAnalyze, applyRedactions, reset } = useDocument();
+  const { step, setStep, state, upload, analyzePage, applyRedactions, reset } = useDocument();
   const [isBackendReady, setIsBackendReady] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -56,8 +56,8 @@ function App() {
           {step === 'upload' && (
             <div className="absolute inset-0 overflow-y-auto px-4 py-8">
               <UploadStep 
-                onAnalyze={uploadAndAnalyze}
-                isUploading={state.isAnalyzing && state.docId === null}
+                onAnalyze={upload}
+                isUploading={state.isUploading}
               />
             </div>
           )}
@@ -66,6 +66,7 @@ function App() {
             <div className="absolute inset-0">
               <ReviewStep 
                 state={state}
+                onAnalyzePage={analyzePage}
                 onApplyRedactions={handleApplyAndExport}
                 onProceed={() => setStep('export')}
               />
