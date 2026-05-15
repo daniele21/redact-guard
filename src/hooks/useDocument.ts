@@ -88,6 +88,33 @@ export function useDocument() {
     }
   };
 
+  const batchAnalyzePages = async (pageNumbers: number[], force: boolean = false) => {
+    if (!state.docId) return;
+    
+    setState(prev => ({ ...prev, isAnalyzing: true }));
+    
+    for (const pageNum of pageNumbers) {
+      try {
+        const result = await api.analyzePage(state.docId, pageNum, force);
+        setState(prev => {
+          const isNew = !prev.analysisResults[pageNum];
+          return {
+            ...prev,
+            analyzedCount: isNew ? prev.analyzedCount + 1 : prev.analyzedCount,
+            analysisResults: {
+              ...prev.analysisResults,
+              [pageNum]: result
+            }
+          };
+        });
+      } catch (err) {
+        console.error(`Error in batch analysis for page ${pageNum}:`, err);
+      }
+    }
+    
+    setState(prev => ({ ...prev, isAnalyzing: false }));
+  };
+
   const applyRedactions = async (fieldsToRedact: RedactRequestItem[]) => {
     if (!state.docId) return;
     try {
@@ -122,6 +149,7 @@ export function useDocument() {
     state,
     upload,
     analyzePage,
+    batchAnalyzePages,
     applyRedactions,
     reset
   };

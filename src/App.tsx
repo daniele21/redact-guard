@@ -8,7 +8,7 @@ import { useDocument } from './hooks/useDocument';
 import { api } from './services/api';
 
 function App() {
-  const { step, setStep, state, upload, analyzePage, applyRedactions, reset } = useDocument();
+  const { step, setStep, state, upload, analyzePage, batchAnalyzePages, applyRedactions, reset } = useDocument();
   const [isBackendReady, setIsBackendReady] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -67,6 +67,7 @@ function App() {
               <ReviewStep 
                 state={state}
                 onAnalyzePage={analyzePage}
+                onBatchAnalyzePages={batchAnalyzePages}
                 onApplyRedactions={handleApplyAndExport}
                 onProceed={() => setStep('export')}
               />
