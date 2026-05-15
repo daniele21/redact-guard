@@ -46,17 +46,17 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-on-surface/40 backdrop-blur-sm">
-      <div className="bg-surface-container-lowest w-full max-w-3xl rounded-2xl shadow-xl flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-surface-container-highest/60 backdrop-blur-sm transition-all duration-300">
+      <div className="bg-surface-container-lowest w-full max-w-3xl rounded-2xl shadow-xl flex flex-col max-h-[90vh] border border-outline-variant transition-colors duration-300">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-outline-variant">
           <div>
-            <h2 className="text-xl font-semibold text-on-surface">Settings & PII Profiles</h2>
-            <p className="text-sm text-on-surface-variant">Configure how the LLM detects sensitive data</p>
+            <h2 className="text-xl font-semibold text-on-surface transition-colors">Settings & PII Profiles</h2>
+            <p className="text-sm text-on-surface-variant transition-colors">Configure how the LLM detects sensitive data</p>
           </div>
           <button 
             onClick={onClose}
-            className="p-2 text-on-surface-variant hover:bg-surface-container hover:text-on-surface rounded-full transition-colors"
+            className="p-2 text-on-surface-variant hover:bg-surface-container hover:text-on-surface rounded-full transition-all"
           >
             <X className="w-5 h-5" />
           </button>
@@ -76,7 +76,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             ) : (
               <div className="grid sm:grid-cols-2 gap-4">
                 {profiles.map(p => (
-                  <div key={p.name} className="border border-outline-variant p-4 rounded-xl bg-surface">
+                  <div key={p.name} className="border border-outline-variant p-4 rounded-xl bg-surface transition-colors">
                     <div className="flex items-center justify-between mb-2">
                       <h4 className="font-semibold text-on-surface capitalize">{p.display_name}</h4>
                       <span className="text-xs font-medium px-2 py-1 bg-surface-container-high rounded-full text-on-surface-variant">
@@ -88,7 +88,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 ))}
               </div>
             )}
-            <p className="text-xs text-on-surface-variant mt-3">
+            <p className="text-xs text-on-surface-variant mt-3 italic">
               * Base profiles define the default PII types. You can select which one to use when uploading a document.
             </p>
           </section>
@@ -100,7 +100,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               <span className="text-xs text-on-surface-variant">Global · Applied to all analysis</span>
             </div>
 
-            <div className="border border-outline-variant rounded-xl overflow-hidden bg-surface">
+            <div className="border border-outline-variant rounded-xl overflow-hidden bg-surface transition-colors">
               {/* List */}
               <div className="divide-y divide-outline-variant max-h-60 overflow-y-auto">
                 {customTypes.length === 0 ? (
@@ -132,14 +132,14 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               </div>
 
               {/* Add form */}
-              <div className="bg-surface-container p-4 border-t border-outline-variant">
+              <div className="bg-surface-container p-4 border-t border-outline-variant transition-colors">
                 <form onSubmit={handleAdd} className="flex flex-col gap-3">
                   {error && <div className="text-error text-sm font-medium">{error}</div>}
                   <div className="flex gap-3">
                     <input
                       type="text"
                       placeholder="Name (e.g. Company ID)"
-                      className="flex-1 px-3 py-2 bg-surface-container-lowest border border-outline-variant rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-pii-custom/50 focus:border-pii-custom"
+                      className="flex-1 px-3 py-2 bg-surface-container-lowest border border-outline-variant rounded-lg text-sm text-on-surface focus:outline-none focus:ring-2 focus:ring-pii-custom/50 focus:border-pii-custom transition-all"
                       value={newTypeName}
                       onChange={e => setNewTypeName(e.target.value)}
                       disabled={isSubmitting}
@@ -148,7 +148,7 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     <button
                       type="submit"
                       disabled={isSubmitting || !newTypeName || !newTypeDesc}
-                      className="flex items-center gap-2 px-4 py-2 bg-on-surface text-surface-container-lowest rounded-lg text-sm font-medium hover:bg-on-surface-variant transition-colors disabled:opacity-50"
+                      className="flex items-center gap-2 px-4 py-2 bg-primary text-on-primary rounded-lg text-sm font-medium hover:bg-primary-container transition-all disabled:opacity-50"
                     >
                       {isSubmitting ? <span className="animate-spin">⌛</span> : <Plus className="w-4 h-4" />}
                       Add Type

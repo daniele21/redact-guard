@@ -9,7 +9,7 @@
   --color-on-primary: #ffffff;
   --color-primary-container: #2563eb;
 
-  /* Surface system */
+  /* Surface system - Light Mode (Default) */
   --color-surface: #f9f9ff;
   --color-surface-dim: #d3daea;
   --color-surface-container-lowest: #ffffff;
@@ -18,7 +18,7 @@
   --color-surface-container-high: #e2e8f8;
   --color-surface-container-highest: #dce2f3;
 
-  /* Text */
+  /* Text - Light Mode */
   --color-on-surface: #151c27;
   --color-on-surface-variant: #434655;
   --color-outline: #737686;
@@ -41,6 +41,46 @@
   --color-pii-custom: #ec4899;
 }
 
-body {
-  @apply bg-surface text-on-surface font-sans antialiased;
+@layer base {
+  .dark {
+    /* Primary palette - Dark Mode Adjustments */
+    --color-primary: #adc6ff;
+    --color-on-primary: #002e7a;
+    --color-primary-container: #1e40af;
+
+    /* Surface system - Dark Mode */
+    --color-surface: #0f172a;
+    --color-surface-dim: #1e293b;
+    --color-surface-container-lowest: #020617;
+    --color-surface-container-low: #1e293b;
+    --color-surface-container: #0f172a;
+    --color-surface-container-high: #1e293b;
+    --color-surface-container-highest: #334155;
+
+    /* Text - Dark Mode */
+    --color-on-surface: #f1f5f9;
+    --color-on-surface-variant: #94a3b8;
+    --color-outline: #64748b;
+    --color-outline-variant: #334155;
+
+    /* Feedback - Dark Mode */
+    --color-error: #ffb4ab;
+    --color-success: #34d399;
+    --color-warning: #fbbf24;
+
+    /* Lighten PII colors for dark mode readability */
+    --color-pii-person: #60a5fa;
+    --color-pii-contact: #a78bfa;
+    --color-pii-location: #22d3ee;
+    --color-pii-date: #fbbf24;
+    --color-pii-health: #f87171;
+    --color-pii-lab: #fb923c;
+    --color-pii-measurement: #2dd4bf;
+    --color-pii-secret: #94a3b8;
+    --color-pii-custom: #f472b6;
+  }
+
+  body {
+    @apply bg-surface text-on-surface font-sans antialiased transition-colors duration-300;
+  }
 }
