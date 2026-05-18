@@ -1,5 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, Lock, Brain, RefreshCw, CheckSquare, Square, Play, Layers } from 'lucide-react';
+import { 
+  ChevronLeft, 
+  ChevronRight, 
+  Lock, 
+  Brain, 
+  RefreshCw, 
+  CheckSquare, 
+  Square, 
+  Play, 
+  Layers, 
+  Grid, 
+  FileText, 
+  CheckCircle2, 
+  AlertCircle, 
+  Eye, 
+  Sparkles 
+} from 'lucide-react';
 import { DocumentState } from '../../hooks/useDocument';
 import { DocumentPanel } from './DocumentPanel';
 import { PIISidebar } from './PIISidebar';
@@ -19,6 +35,7 @@ export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyR
   const [isExporting, setIsExporting] = useState(false);
   const [selectedPages, setSelectedPages] = useState<Set<number>>(new Set());
   const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [viewMode, setViewMode] = useState<'document' | 'grid'>('document');
   
 
   const totalPages = state.pages.length;
@@ -148,38 +165,88 @@ export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyR
     <div className="flex flex-col h-[calc(100vh-12rem)]">
       {/* Toolbar */}
       <div className="flex items-center justify-between bg-surface p-4 border-b border-outline-variant shrink-0">
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-4 bg-surface-container rounded-full p-1">
+        <div className="flex items-center gap-4">
+          {viewMode === 'document' && (
+            <div className="flex items-center gap-4 bg-surface-container rounded-full p-1">
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1 || isAnalyzing}
+                className="p-2 rounded-full hover:bg-surface disabled:opacity-50 transition-colors"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+              <span className="text-sm font-medium text-on-surface min-w-[80px] text-center">
+                Page {currentPage} of {totalPages}
+              </span>
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, Math.min(totalPages, p + 1)))}
+                disabled={currentPage === totalPages || isAnalyzing}
+                className="p-2 rounded-full hover:bg-surface disabled:opacity-50 transition-colors"
+              >
+                <ChevronRight className="w-5 h-5" />
+              </button>
+            </div>
+          )}
+
+          {/* Segmented View Switcher */}
+          <div className="flex bg-surface-container rounded-full p-1 border border-outline-variant/30">
             <button
-              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-              disabled={currentPage === 1 || isAnalyzing}
-              className="p-2 rounded-full hover:bg-surface disabled:opacity-50 transition-colors"
+              onClick={() => setViewMode('document')}
+              className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-2 ${viewMode === 'document' ? 'bg-primary text-on-primary shadow-md shadow-primary/10' : 'text-on-surface-variant hover:text-on-surface'}`}
             >
-              <ChevronLeft className="w-5 h-5" />
+              <FileText className="w-3.5 h-3.5" />
+              Editor
             </button>
-            <span className="text-sm font-medium text-on-surface min-w-[80px] text-center">
-              Page {currentPage} of {totalPages}
-            </span>
             <button
-              onClick={() => setCurrentPage(p => Math.max(1, Math.min(totalPages, p + 1)))}
-              disabled={currentPage === totalPages || isAnalyzing}
-              className="p-2 rounded-full hover:bg-surface disabled:opacity-50 transition-colors"
+              onClick={() => setViewMode('grid')}
+              className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-2 ${viewMode === 'grid' ? 'bg-primary text-on-primary shadow-md shadow-primary/10' : 'text-on-surface-variant hover:text-on-surface'}`}
             >
-              <ChevronRight className="w-5 h-5" />
+              <Grid className="w-3.5 h-3.5" />
+              Grid View
             </button>
           </div>
           
-          <button
-            onClick={() => setIsSelectionMode(!isSelectionMode)}
-            className={`p-2.5 rounded-full transition-all ${isSelectionMode ? 'bg-primary text-on-primary shadow-lg shadow-primary/20' : 'bg-surface-container text-on-surface-variant hover:bg-surface-container-high'}`}
-            title="Toggle Page Selection Mode"
-          >
-            <CheckSquare className="w-5 h-5" />
-          </button>
+          {viewMode === 'document' && (
+            <button
+              onClick={() => setIsSelectionMode(!isSelectionMode)}
+              className={`p-2.5 rounded-full transition-all ${isSelectionMode ? 'bg-primary text-on-primary shadow-lg shadow-primary/20' : 'bg-surface-container text-on-surface-variant hover:bg-surface-container-high'}`}
+              title="Toggle Page Selection Mode"
+            >
+              <CheckSquare className="w-5 h-5" />
+            </button>
+          )}
         </div>
 
         <div className="flex-1 flex justify-center px-4">
-          {isSelectionMode ? (
+          {viewMode === 'grid' ? (
+            <div className="flex items-center gap-4 bg-surface-container-high rounded-2xl px-6 py-2 border border-outline-variant/50 animate-in fade-in zoom-in duration-300">
+              <span className="text-xs font-bold text-on-surface-variant">
+                {selectedPages.size} of {totalPages} Pages Selected
+              </span>
+              <div className="w-px h-6 bg-outline-variant/30" />
+              <div className="flex gap-2">
+                <button onClick={selectAllPages} className="text-xs font-bold text-on-surface hover:text-primary transition-colors">Select All</button>
+                <button onClick={deselectAllPages} className="text-xs font-bold text-on-surface hover:text-primary transition-colors">Clear</button>
+              </div>
+              <div className="w-px h-6 bg-outline-variant/30" />
+              <button
+                onClick={analyzeSelected}
+                disabled={selectedPages.size === 0 || isAnalyzing}
+                className="flex items-center gap-2 px-4 py-1.5 bg-primary text-on-primary rounded-lg text-xs font-bold hover:bg-primary/95 transition-all disabled:opacity-50"
+              >
+                <Play className="w-3.5 h-3.5 fill-current" />
+                Scan Selected ({selectedPages.size})
+              </button>
+              <button
+                onClick={analyzeAll}
+                disabled={isAnalyzing}
+                className="flex items-center gap-2 px-3 py-1.5 bg-surface text-on-surface border border-outline-variant rounded-lg text-xs font-bold hover:bg-surface-container transition-colors disabled:opacity-50"
+              >
+                <Layers className="w-3.5 h-3.5" />
+                Scan All
+              </button>
+            </div>
+          ) : isSelectionMode ? (
             <div className="flex items-center gap-4 bg-surface-container-high rounded-2xl px-6 py-2 border border-primary/30 animate-in fade-in zoom-in duration-300">
               <span className="text-sm font-bold text-primary">{selectedPages.size} pages selected</span>
               <div className="w-px h-6 bg-outline-variant/30" />
@@ -268,62 +335,191 @@ export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyR
 
       {/* Main Content */}
       <div className="flex-1 flex gap-6 p-6 min-h-0">
-        <div className="flex-[2] min-w-0 flex flex-col gap-4">
-          {isSelectionMode && (
-            <div className="bg-surface-container p-4 rounded-2xl border border-primary/20 flex flex-wrap gap-2 max-h-32 overflow-y-auto">
-              {state.pages.map(p => (
-                <button
-                  key={p.page_number}
-                  onClick={() => togglePageSelection(p.page_number)}
-                  className={`
-                    flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all border
-                    ${selectedPages.has(p.page_number) 
-                      ? 'bg-primary text-on-primary border-primary shadow-md' 
-                      : 'bg-surface text-on-surface-variant border-outline-variant hover:border-primary/50'}
-                  `}
-                >
-                  {selectedPages.has(p.page_number) ? <CheckSquare className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5" />}
-                  Page {p.page_number}
-                </button>
-              ))}
+        {viewMode === 'grid' ? (
+          <div className="flex-1 overflow-y-auto p-6 bg-surface-container-low/30 rounded-3xl border border-outline-variant/30">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+              {state.pages.map(p => {
+                const result = state.analysisResults[p.page_number];
+                const isSelected = selectedPages.has(p.page_number);
+                const isCurrent = currentPage === p.page_number;
+                const isPageAnalyzing = state.isAnalyzing && state.currentAnalyzingPage === p.page_number;
+                
+                return (
+                  <div
+                    key={p.page_number}
+                    className={`
+                      relative group flex flex-col aspect-[3/4.2] rounded-2xl border transition-all duration-300 overflow-hidden bg-surface shadow-sm hover:shadow-xl hover:scale-[1.02] cursor-pointer
+                      ${isSelected ? 'border-primary ring-2 ring-primary/20' : 'border-outline-variant hover:border-primary/50'}
+                      ${isCurrent ? 'ring-2 ring-primary ring-offset-2' : ''}
+                    `}
+                    onClick={() => {
+                      setCurrentPage(p.page_number);
+                      setViewMode('document');
+                    }}
+                  >
+                    {/* Checkbox button */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        togglePageSelection(p.page_number);
+                      }}
+                      className="absolute top-3 right-3 z-20 p-1.5 rounded-lg bg-surface/90 backdrop-blur-sm border border-outline-variant hover:border-primary transition-all text-on-surface shadow-sm"
+                    >
+                      {isSelected ? (
+                        <CheckSquare className="w-4.5 h-4.5 text-primary" />
+                      ) : (
+                        <Square className="w-4.5 h-4.5 text-outline" />
+                      )}
+                    </button>
+
+                    {/* Miniature Page Content */}
+                    <div className="flex-1 p-3 pt-9 font-mono text-[6.5px] leading-[1.2] text-on-surface-variant overflow-hidden select-none relative">
+                      <div className="space-y-0.5 h-full overflow-hidden">
+                        {p.text.split('\n').slice(0, 32).map((line, idx) => {
+                          if (!result) {
+                            return <div key={idx} className="truncate tracking-tight opacity-65">{line || ' '}</div>;
+                          }
+                          
+                          const words = line.split(' ');
+                          return (
+                            <div key={idx} className="truncate tracking-tight flex flex-wrap gap-x-0.5 gap-y-0 opacity-90">
+                              {words.map((word, wIdx) => {
+                                const cleanWord = word.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,"");
+                                const isPII = result.pii_fields.some(f => f.value.toLowerCase().includes(cleanWord.toLowerCase()) && cleanWord.length > 2);
+                                if (isPII && cleanWord.length > 0) {
+                                  return (
+                                    <span key={wIdx} className="bg-primary/30 text-primary px-0.5 rounded-[1px] font-bold text-[5.5px]">
+                                      {word}
+                                    </span>
+                                  );
+                                  
+                                }
+                                return <span key={wIdx} className="opacity-70">{word}</span>;
+                              })}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      
+                      <div className="absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-surface to-transparent pointer-events-none" />
+                    </div>
+
+                    {/* Status Badge */}
+                    <div className="p-3 border-t border-outline-variant bg-surface-container/50 flex items-center justify-between text-xs z-10">
+                      <div className="flex items-center gap-1.5">
+                        {isPageAnalyzing ? (
+                          <>
+                            <div className="w-3.5 h-3.5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                            <span className="font-bold text-primary animate-pulse">Scanning...</span>
+                          </>
+                        ) : result ? (
+                          <>
+                            <CheckCircle2 className="w-3.5 h-3.5 text-success" />
+                            <span className="font-bold text-success">{result.pii_fields.length} PII</span>
+                          </>
+                        ) : (
+                          <>
+                            <AlertCircle className="w-3.5 h-3.5 text-outline" />
+                            <span className="text-on-surface-variant">Not Scanned</span>
+                          </>
+                        )}
+                      </div>
+                      
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 bg-surface-container-high rounded border border-outline-variant text-on-surface-variant">
+                        Page {p.page_number}
+                      </span>
+                    </div>
+
+                    {/* Hover actions overlay */}
+                    <div className="absolute inset-0 bg-surface/50 backdrop-blur-[1px] opacity-0 group-hover:opacity-100 flex items-center justify-center gap-2 transition-all duration-300 z-10">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onAnalyzePage(p.page_number, !!result);
+                        }}
+                        disabled={isAnalyzing}
+                        className="p-2.5 rounded-full bg-primary text-on-primary shadow-lg hover:scale-110 active:scale-95 transition-all"
+                        title={result ? "Re-scan Page" : "Scan Page"}
+                      >
+                        <RefreshCw className={`w-4 h-4 ${isPageAnalyzing ? 'animate-spin' : ''}`} />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setCurrentPage(p.page_number);
+                          setViewMode('document');
+                        }}
+                        className="p-2.5 rounded-full bg-surface text-on-surface border border-outline-variant shadow-lg hover:scale-110 active:scale-95 transition-all"
+                        title="Open in Editor"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-          )}
-          
-          <div className="flex-1 overflow-y-auto">
-            {currentPageData ? (
-              <DocumentPanel 
-                text={currentPageData.text}
+          </div>
+        ) : (
+          <>
+            <div className="flex-[2] min-w-0 flex flex-col gap-4">
+              {isSelectionMode && (
+                <div className="bg-surface-container p-4 rounded-2xl border border-primary/20 flex flex-wrap gap-2 max-h-32 overflow-y-auto">
+                  {state.pages.map(p => (
+                    <button
+                      key={p.page_number}
+                      onClick={() => togglePageSelection(p.page_number)}
+                      className={`
+                        flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all border
+                        ${selectedPages.has(p.page_number) 
+                          ? 'bg-primary text-on-primary border-primary shadow-md' 
+                          : 'bg-surface text-on-surface-variant border-outline-variant hover:border-primary/50'}
+                      `}
+                    >
+                      {selectedPages.has(p.page_number) ? <CheckSquare className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5" />}
+                      Page {p.page_number}
+                    </button>
+                  ))}
+                </div>
+              )}
+              
+              <div className="flex-1 overflow-y-auto">
+                {currentPageData ? (
+                  <DocumentPanel 
+                    text={currentPageData.text}
+                    fields={currentResult?.pii_fields || []}
+                    redactionOverrides={overrides}
+                    excludedFields={excludedFields}
+                    onToggleRedaction={toggleRedaction}
+                    pageNumber={currentPage}
+                  />
+                ) : (
+                  <div className="h-full flex items-center justify-center text-outline">
+                    Page content not found
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            <div className="flex-1 min-w-[320px] max-w-[400px]">
+              <PIISidebar 
                 fields={currentResult?.pii_fields || []}
+                allResults={state.analysisResults}
+                pageNumber={currentPage}
+                cacheHit={currentResult?.cache_hit || false}
                 redactionOverrides={overrides}
                 excludedFields={excludedFields}
                 onToggleRedaction={toggleRedaction}
-                pageNumber={currentPage}
+                onToggleExclusion={toggleExclusion}
+                onRedactAll={redactAll}
+                onKeepAll={keepAll}
+                isAnalyzing={isAnalyzing}
+                onJumpToOccurrence={handleJumpToOccurrence}
+                onNavigateToPage={(p) => setCurrentPage(p)}
               />
-            ) : (
-              <div className="h-full flex items-center justify-center text-outline">
-                Page content not found
-              </div>
-            )}
-          </div>
-        </div>
-        
-        <div className="flex-1 min-w-[320px] max-w-[400px]">
-          <PIISidebar 
-            fields={currentResult?.pii_fields || []}
-            allResults={state.analysisResults}
-            pageNumber={currentPage}
-            cacheHit={currentResult?.cache_hit || false}
-            redactionOverrides={overrides}
-            excludedFields={excludedFields}
-            onToggleRedaction={toggleRedaction}
-            onToggleExclusion={toggleExclusion}
-            onRedactAll={redactAll}
-            onKeepAll={keepAll}
-            isAnalyzing={isAnalyzing}
-            onJumpToOccurrence={handleJumpToOccurrence}
-            onNavigateToPage={(p) => setCurrentPage(p)}
-          />
-        </div>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

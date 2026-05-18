@@ -12,6 +12,7 @@ export interface DocumentState {
   redactedPages: RedactedPage[];
   isUploading: boolean;
   isAnalyzing: boolean;
+  currentAnalyzingPage: number | null;
   analyzedCount: number;
 }
 
@@ -25,6 +26,7 @@ export function useDocument() {
     redactedPages: [],
     isUploading: false,
     isAnalyzing: false,
+    currentAnalyzingPage: null,
     analyzedCount: 0,
   });
 
@@ -38,6 +40,7 @@ export function useDocument() {
         pages: [],
         analysisResults: {},
         redactedPages: [],
+        currentAnalyzingPage: null,
         analyzedCount: 0
       }));
 
@@ -66,6 +69,7 @@ export function useDocument() {
     setState(prev => ({ 
       ...prev, 
       isAnalyzing: true,
+      currentAnalyzingPage: pageNumber,
     }));
 
     try {
@@ -84,7 +88,7 @@ export function useDocument() {
     } catch (err) {
       console.error(`Error analyzing page ${pageNumber}:`, err);
     } finally {
-      setState(prev => ({ ...prev, isAnalyzing: false }));
+      setState(prev => ({ ...prev, isAnalyzing: false, currentAnalyzingPage: null }));
     }
   };
 
@@ -94,6 +98,7 @@ export function useDocument() {
     setState(prev => ({ ...prev, isAnalyzing: true }));
     
     for (const pageNum of pageNumbers) {
+      setState(prev => ({ ...prev, currentAnalyzingPage: pageNum }));
       try {
         const result = await api.analyzePage(state.docId, pageNum, force);
         setState(prev => {
@@ -112,7 +117,7 @@ export function useDocument() {
       }
     }
     
-    setState(prev => ({ ...prev, isAnalyzing: false }));
+    setState(prev => ({ ...prev, isAnalyzing: false, currentAnalyzingPage: null }));
   };
 
   const applyRedactions = async (fieldsToRedact: RedactRequestItem[]) => {
@@ -139,6 +144,7 @@ export function useDocument() {
       redactedPages: [],
       isUploading: false,
       isAnalyzing: false,
+      currentAnalyzingPage: null,
       analyzedCount: 0,
     });
   }, []);

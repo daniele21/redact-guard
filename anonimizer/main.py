@@ -1,8 +1,11 @@
 import logging
 import asyncio
+import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from config import config
 from api.routes_health import router as health_router
 from api.routes_upload import router as upload_router
@@ -56,9 +59,25 @@ app.include_router(redact_router, prefix="/api", tags=["Redact"])
 app.include_router(cache_router, prefix="/api", tags=["Cache"])
 app.include_router(export_router, prefix="/api", tags=["Export"])
 
-@app.get("/")
-def read_root():
-    return {"message": "RedactGuard API is running. Check /api/health"}
+# Serve frontend static files in production mode
+DIST_DIR = Path(__file__).parent.parent / "dist"
+if DIST_DIR.exists() and not os.getenv("REDACTGUARD_DEV"):
+    from fastapi.responses import FileResponse
+
+    # Mount static assets (JS, CSS, images)
+    app.mount("/assets", StaticFiles(directory=str(DIST_DIR / "assets")), name="static-assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        """Serve the SPA index.html for all non-API routes."""
+        file_path = DIST_DIR / full_path
+        if full_path and file_path.exists() and file_path.is_file():
+            return FileResponse(str(file_path))
+        return FileResponse(str(DIST_DIR / "index.html"))
+else:
+    @app.get("/")
+    def read_root():
+        return {"message": "RedactGuard API is running. Check /api/health"}
 
 if __name__ == "__main__":
     import uvicorn
