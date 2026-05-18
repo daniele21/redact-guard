@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   ChevronLeft, 
   ChevronRight, 
@@ -20,6 +20,9 @@ import { DocumentState } from '../../hooks/useDocument';
 import { DocumentPanel } from './DocumentPanel';
 import { PIISidebar } from './PIISidebar';
 
+// Fixed skeleton line widths for grid card miniatures (avoids randomness in render)
+const SKELETON_WIDTHS = [82, 95, 71, 88, 64, 90, 76, 93, 68, 85, 73, 79, 91, 67, 86, 80, 72, 94, 62, 87, 77, 89, 66, 83, 70, 92, 75, 96, 63, 84, 78, 91];
+
 interface ReviewStepProps {
   state: DocumentState;
   onAnalyzePage: (pageNumber: number, force?: boolean) => Promise<void>;
@@ -36,6 +39,8 @@ export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyR
   const [selectedPages, setSelectedPages] = useState<Set<number>>(new Set());
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [viewMode, setViewMode] = useState<'document' | 'grid'>('document');
+  const [recentlyCompletedPages, setRecentlyCompletedPages] = useState<Set<number>>(new Set());
+  const prevAnalysisResultsRef = useRef<Record<number, unknown>>({});
   
 
   const totalPages = state.pages.length;
@@ -60,6 +65,34 @@ export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyR
         return changed ? newOverrides : prev;
       });
     });
+  }, [state.analysisResults]);
+
+  // Detect newly completed pages and flash a "done" overlay briefly
+  useEffect(() => {
+    const prev = prevAnalysisResultsRef.current;
+    const current = state.analysisResults;
+    const newlyCompleted: number[] = Object.keys(current)
+      .map(Number)
+      .filter(pageNum => !prev[pageNum]);
+
+    if (newlyCompleted.length > 0) {
+      setRecentlyCompletedPages(existing => {
+        const next = new Set(existing);
+        newlyCompleted.forEach(p => next.add(p));
+        return next;
+      });
+      newlyCompleted.forEach(pageNum => {
+        setTimeout(() => {
+          setRecentlyCompletedPages(existing => {
+            const next = new Set(existing);
+            next.delete(pageNum);
+            return next;
+          });
+        }, 2200);
+      });
+    }
+
+    prevAnalysisResultsRef.current = current;
   }, [state.analysisResults]);
 
   const toggleRedaction = (fieldId: string) => {
@@ -342,7 +375,10 @@ export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyR
                 const result = state.analysisResults[p.page_number];
                 const isSelected = selectedPages.has(p.page_number);
                 const isCurrent = currentPage === p.page_number;
-                const isPageAnalyzing = state.isAnalyzing && state.currentAnalyzingPage === p.page_number;
+                const isPending = state.pendingPages.includes(p.page_number);
+                const isPageAnalyzing = state.currentAnalyzingPage === p.page_number;
+                const isRecentlyDone = recentlyCompletedPages.has(p.page_number);
+                const isLoadingState = isPending || isPageAnalyzing;
                 
                 return (
                   <div
@@ -351,6 +387,7 @@ export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyR
                       relative group flex flex-col aspect-[3/4.2] rounded-2xl border transition-all duration-300 overflow-hidden bg-surface shadow-sm hover:shadow-xl hover:scale-[1.02] cursor-pointer
                       ${isSelected ? 'border-primary ring-2 ring-primary/20' : 'border-outline-variant hover:border-primary/50'}
                       ${isCurrent ? 'ring-2 ring-primary ring-offset-2' : ''}
+                      ${isRecentlyDone ? 'ring-2 ring-success/60 border-success/40' : ''}
                     `}
                     onClick={() => {
                       setCurrentPage(p.page_number);
@@ -374,32 +411,45 @@ export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyR
 
                     {/* Miniature Page Content */}
                     <div className="flex-1 p-3 pt-9 font-mono text-[6.5px] leading-[1.2] text-on-surface-variant overflow-hidden select-none relative">
-                      <div className="space-y-0.5 h-full overflow-hidden">
-                        {p.text.split('\n').slice(0, 32).map((line, idx) => {
-                          if (!result) {
-                            return <div key={idx} className="truncate tracking-tight opacity-65">{line || ' '}</div>;
-                          }
-                          
-                          const words = line.split(' ');
-                          return (
-                            <div key={idx} className="truncate tracking-tight flex flex-wrap gap-x-0.5 gap-y-0 opacity-90">
-                              {words.map((word, wIdx) => {
-                                const cleanWord = word.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,"");
-                                const isPII = result.pii_fields.some(f => f.value.toLowerCase().includes(cleanWord.toLowerCase()) && cleanWord.length > 2);
-                                if (isPII && cleanWord.length > 0) {
-                                  return (
-                                    <span key={wIdx} className="bg-primary/30 text-primary px-0.5 rounded-[1px] font-bold text-[5.5px]">
-                                      {word}
-                                    </span>
-                                  );
-                                  
-                                }
-                                return <span key={wIdx} className="opacity-70">{word}</span>;
-                              })}
-                            </div>
-                          );
-                        })}
-                      </div>
+                      {isLoadingState ? (
+                        /* Skeleton shimmer lines */
+                        <div className="space-y-1 h-full overflow-hidden">
+                          {SKELETON_WIDTHS.slice(0, 24).map((w, i) => (
+                            <div
+                              key={i}
+                              className="h-1.5 rounded-full bg-on-surface/8 animate-pulse"
+                              style={{ width: `${w}%`, animationDelay: `${(i % 6) * 80}ms` }}
+                            />
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="space-y-0.5 h-full overflow-hidden">
+                          {p.text.split('\n').slice(0, 32).map((line, idx) => {
+                            if (!result) {
+                              return <div key={idx} className="truncate tracking-tight opacity-65">{line || ' '}</div>;
+                            }
+                            
+                            const words = line.split(' ');
+                            return (
+                              <div key={idx} className="truncate tracking-tight flex flex-wrap gap-x-0.5 gap-y-0 opacity-90">
+                                {words.map((word, wIdx) => {
+                                  const cleanWord = word.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,"");
+                                  const isPII = result.pii_fields.some(f => f.value.toLowerCase().includes(cleanWord.toLowerCase()) && cleanWord.length > 2);
+                                  if (isPII && cleanWord.length > 0) {
+                                    return (
+                                      <span key={wIdx} className="bg-primary/30 text-primary px-0.5 rounded-[1px] font-bold text-[5.5px]">
+                                        {word}
+                                      </span>
+                                    );
+                                    
+                                  }
+                                  return <span key={wIdx} className="opacity-70">{word}</span>;
+                                })}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                       
                       <div className="absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-surface to-transparent pointer-events-none" />
                     </div>
@@ -411,6 +461,11 @@ export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyR
                           <>
                             <div className="w-3.5 h-3.5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
                             <span className="font-bold text-primary animate-pulse">Scanning...</span>
+                          </>
+                        ) : isPending ? (
+                          <>
+                            <div className="w-3.5 h-3.5 border-2 border-outline/20 border-t-on-surface-variant rounded-full animate-spin" />
+                            <span className="font-medium text-on-surface-variant">Queued</span>
                           </>
                         ) : result ? (
                           <>
@@ -430,31 +485,51 @@ export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyR
                       </span>
                     </div>
 
-                    {/* Hover actions overlay */}
-                    <div className="absolute inset-0 bg-surface/50 backdrop-blur-[1px] opacity-0 group-hover:opacity-100 flex items-center justify-center gap-2 transition-all duration-300 z-10">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onAnalyzePage(p.page_number, !!result);
-                        }}
-                        disabled={isAnalyzing}
-                        className="p-2.5 rounded-full bg-primary text-on-primary shadow-lg hover:scale-110 active:scale-95 transition-all"
-                        title={result ? "Re-scan Page" : "Scan Page"}
-                      >
-                        <RefreshCw className={`w-4 h-4 ${isPageAnalyzing ? 'animate-spin' : ''}`} />
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setCurrentPage(p.page_number);
-                          setViewMode('document');
-                        }}
-                        className="p-2.5 rounded-full bg-surface text-on-surface border border-outline-variant shadow-lg hover:scale-110 active:scale-95 transition-all"
-                        title="Open in Editor"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </button>
-                    </div>
+                    {/* Hover actions overlay — hidden while loading */}
+                    {!isLoadingState && (
+                      <div className="absolute inset-0 bg-surface/50 backdrop-blur-[1px] opacity-0 group-hover:opacity-100 flex items-center justify-center gap-2 transition-all duration-300 z-10">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onAnalyzePage(p.page_number, !!result);
+                          }}
+                          disabled={isAnalyzing}
+                          className="p-2.5 rounded-full bg-primary text-on-primary shadow-lg hover:scale-110 active:scale-95 transition-all"
+                          title={result ? "Re-scan Page" : "Scan Page"}
+                        >
+                          <RefreshCw className={`w-4 h-4 ${isPageAnalyzing ? 'animate-spin' : ''}`} />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setCurrentPage(p.page_number);
+                            setViewMode('document');
+                          }}
+                          className="p-2.5 rounded-full bg-surface text-on-surface border border-outline-variant shadow-lg hover:scale-110 active:scale-95 transition-all"
+                          title="Open in Editor"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Scanning active overlay */}
+                    {isPageAnalyzing && (
+                      <div className="absolute inset-0 bg-primary/5 flex flex-col items-center justify-center z-20 pointer-events-none">
+                        <div className="w-8 h-8 border-[3px] border-primary/20 border-t-primary rounded-full animate-spin mb-2" />
+                        <span className="text-[9px] font-bold text-primary tracking-wide uppercase animate-pulse">Scanning</span>
+                      </div>
+                    )}
+
+                    {/* Recently completed flash overlay */}
+                    {isRecentlyDone && (
+                      <div className="absolute inset-0 bg-success/10 flex flex-col items-center justify-center z-25 pointer-events-none animate-in fade-in duration-300">
+                        <div className="bg-success text-on-primary rounded-2xl px-3 py-2 flex items-center gap-2 shadow-lg shadow-success/20">
+                          <CheckCircle2 className="w-4 h-4" />
+                          <span className="text-[10px] font-bold tracking-wide uppercase">Done</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -483,7 +558,7 @@ export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyR
                 </div>
               )}
               
-              <div className="flex-1 overflow-y-auto">
+              <div className="flex-1 overflow-y-auto relative">
                 {currentPageData ? (
                   <DocumentPanel 
                     text={currentPageData.text}
@@ -496,6 +571,39 @@ export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyR
                 ) : (
                   <div className="h-full flex items-center justify-center text-outline">
                     Page content not found
+                  </div>
+                )}
+
+                {/* Document view scanning/pending overlay for current page */}
+                {(state.currentAnalyzingPage === currentPage || state.pendingPages.includes(currentPage)) && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-surface/70 backdrop-blur-[2px] z-20 rounded-xl animate-in fade-in duration-200">
+                    {state.currentAnalyzingPage === currentPage ? (
+                      <>
+                        <div className="w-10 h-10 border-[3px] border-primary/20 border-t-primary rounded-full animate-spin" />
+                        <div className="flex flex-col items-center gap-1">
+                          <span className="text-sm font-bold text-primary animate-pulse">Analyzing page {currentPage}…</span>
+                          <span className="text-xs text-on-surface-variant">AI is detecting PII fields</span>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="w-8 h-8 border-[3px] border-on-surface-variant/20 border-t-on-surface-variant rounded-full animate-spin" />
+                        <div className="flex flex-col items-center gap-1">
+                          <span className="text-sm font-bold text-on-surface-variant">Page {currentPage} is queued</span>
+                          <span className="text-xs text-on-surface-variant/70">Waiting for previous pages to finish</span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {/* Recently completed flash for current page */}
+                {recentlyCompletedPages.has(currentPage) && (
+                  <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 animate-in fade-in slide-in-from-top-2 duration-300">
+                    <div className="bg-success text-on-primary rounded-full px-4 py-2 flex items-center gap-2 shadow-lg shadow-success/20">
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span className="text-xs font-bold">Scan complete</span>
+                    </div>
                   </div>
                 )}
               </div>

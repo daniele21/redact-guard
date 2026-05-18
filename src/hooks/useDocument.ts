@@ -13,6 +13,7 @@ export interface DocumentState {
   isUploading: boolean;
   isAnalyzing: boolean;
   currentAnalyzingPage: number | null;
+  pendingPages: number[];
   analyzedCount: number;
 }
 
@@ -27,6 +28,7 @@ export function useDocument() {
     isUploading: false,
     isAnalyzing: false,
     currentAnalyzingPage: null,
+    pendingPages: [],
     analyzedCount: 0,
   });
 
@@ -95,10 +97,16 @@ export function useDocument() {
   const batchAnalyzePages = async (pageNumbers: number[], force: boolean = false) => {
     if (!state.docId) return;
     
-    setState(prev => ({ ...prev, isAnalyzing: true }));
+    // Mark all pages as pending at the start
+    setState(prev => ({ ...prev, isAnalyzing: true, pendingPages: [...pageNumbers] }));
     
     for (const pageNum of pageNumbers) {
-      setState(prev => ({ ...prev, currentAnalyzingPage: pageNum }));
+      // Move page from pending queue to actively scanning
+      setState(prev => ({
+        ...prev,
+        currentAnalyzingPage: pageNum,
+        pendingPages: prev.pendingPages.filter(p => p !== pageNum),
+      }));
       try {
         const result = await api.analyzePage(state.docId, pageNum, force);
         setState(prev => {
@@ -117,7 +125,7 @@ export function useDocument() {
       }
     }
     
-    setState(prev => ({ ...prev, isAnalyzing: false, currentAnalyzingPage: null }));
+    setState(prev => ({ ...prev, isAnalyzing: false, currentAnalyzingPage: null, pendingPages: [] }));
   };
 
   const applyRedactions = async (fieldsToRedact: RedactRequestItem[]) => {
@@ -143,6 +151,7 @@ export function useDocument() {
       analysisResults: {},
       redactedPages: [],
       isUploading: false,
+      pendingPages: [],
       isAnalyzing: false,
       currentAnalyzingPage: null,
       analyzedCount: 0,
