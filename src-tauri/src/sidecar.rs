@@ -7,7 +7,7 @@ use tauri_plugin_shell::process::CommandEvent;
 use crate::SidecarState;
 
 const HEALTH_CHECK_INTERVAL: Duration = Duration::from_millis(500);
-const HEALTH_CHECK_TIMEOUT: Duration = Duration::from_secs(60);
+const HEALTH_CHECK_TIMEOUT: Duration = Duration::from_secs(1800); // 30 min: first launch downloads ~2.5GB model
 
 /// Resolve the project root directory.
 /// - In dev: parent of CARGO_MANIFEST_DIR (which is src-tauri/)

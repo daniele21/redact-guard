@@ -34,10 +34,15 @@ DEFAULT_N_BATCH = 512
 DEFAULT_N_UBATCH = 512
 
 DEFAULT_TIMEOUT = 1200
-DEFAULT_MODEL_PATH = (
-    "/Users/moltisantid/.lmstudio/models/lmstudio-community/"
-    "NVIDIA-Nemotron-3-Nano-4B-GGUF/NVIDIA-Nemotron-3-Nano-4B-Q4_K_M.gguf"
+
+# Model is stored in ~/.redactguard/models/ — downloaded automatically on first launch
+DEFAULT_MODELS_DIR = Path.home() / ".redactguard" / "models"
+DEFAULT_MODEL_FILENAME = "NVIDIA-Nemotron-3-Nano-4B-Q4_K_M.gguf"
+DEFAULT_MODEL_URL = (
+    "https://huggingface.co/lmstudio-community/NVIDIA-Nemotron-3-Nano-4B-GGUF/"
+    "resolve/main/NVIDIA-Nemotron-3-Nano-4B-Q4_K_M.gguf"
 )
+DEFAULT_MODEL_PATH = str(DEFAULT_MODELS_DIR / DEFAULT_MODEL_FILENAME)
 
 
 def _json_response(handler: BaseHTTPRequestHandler, status: int, payload: dict[str, Any]) -> None:
@@ -237,11 +242,49 @@ def _lmstudio_compatible_response(
     return payload
 
 
+def _ensure_model(model_path: Path) -> None:
+    """Download the model if it is not present on disk."""
+    if model_path.exists():
+        return
+
+    logger.info(f"Model not found at {model_path} — starting automatic download (~2.5 GB)")
+    model_path.parent.mkdir(parents=True, exist_ok=True)
+
+    partial = model_path.with_suffix(model_path.suffix + ".part")
+    resume_size = partial.stat().st_size if partial.exists() else 0
+
+    import urllib.request
+    req = urllib.request.Request(DEFAULT_MODEL_URL)
+    if resume_size > 0:
+        req.add_header("Range", f"bytes={resume_size}-")
+        logger.info(f"Resuming download from {resume_size / 1024 / 1024:.1f} MB")
+
+    try:
+        with urllib.request.urlopen(req, timeout=3600) as response:
+            total = int(response.headers.get("Content-Length", 0)) + resume_size
+            downloaded = resume_size
+            mode = "ab" if resume_size > 0 else "wb"
+            with open(partial, mode) as f:
+                while True:
+                    chunk = response.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+                    downloaded += len(chunk)
+                    pct = downloaded / total * 100 if total else 0
+                    logger.info(f"Downloading model: {downloaded / 1024 / 1024:.0f}/{total / 1024 / 1024:.0f} MB ({pct:.1f}%)")
+    except Exception as exc:
+        logger.error(f"Download failed: {exc}")
+        raise SystemExit(f"Could not download model: {exc}")
+
+    partial.rename(model_path)
+    logger.info(f"Model downloaded successfully: {model_path}")
+
+
 def _load_llm(args: argparse.Namespace) -> Any:
     model_path = Path(args.model_path).expanduser()
 
-    if not model_path.exists():
-        raise SystemExit(f"Nemotron GGUF not found: {model_path}")
+    _ensure_model(model_path)
 
     try:
         from llama_cpp import Llama

@@ -1,30 +1,51 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Navbar } from './components/layout/Navbar';
 import { StepIndicator } from './components/layout/StepIndicator';
 import { UploadStep } from './components/upload/UploadStep';
 import { ReviewStep } from './components/review/ReviewStep';
 import { ExportStep } from './components/export/ExportStep';
+import { ModelSetupScreen } from './components/setup/ModelSetupScreen';
 import { useDocument } from './hooks/useDocument';
 import { api } from './services/api';
 
+type AppPhase = 'checking-model' | 'model-setup' | 'starting-backend' | 'ready' | 'backend-error';
+
 function App() {
   const { step, setStep, state, upload, analyzePage, batchAnalyzePages, applyRedactions, reset } = useDocument();
-  const [isBackendReady, setIsBackendReady] = useState<boolean | null>(null);
+  const [phase, setPhase] = useState<AppPhase>('checking-model');
 
+  // Step 1: check if model is on disk
   useEffect(() => {
+    (async () => {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        const exists = await invoke<boolean>('check_model_exists');
+        setPhase(exists ? 'starting-backend' : 'model-setup');
+      } catch {
+        // Not in Tauri (dev mode) — skip model check
+        setPhase('starting-backend');
+      }
+    })();
+  }, []);
+
+  // Step 2: poll backend health once we know the model is ready
+  useEffect(() => {
+    if (phase !== 'starting-backend') return;
+
     let cancelled = false;
-    const maxAttempts = 30;
+    // Poll for up to 30 minutes (model load + LLM warm-up on first run)
+    const maxAttempts = 1800;
     const interval = 1000;
 
     async function pollHealth(attempt: number) {
       if (cancelled) return;
       try {
         await api.health();
-        if (!cancelled) setIsBackendReady(true);
+        if (!cancelled) setPhase('ready');
       } catch {
         if (cancelled) return;
         if (attempt >= maxAttempts) {
-          setIsBackendReady(false);
+          setPhase('backend-error');
         } else {
           setTimeout(() => pollHealth(attempt + 1), interval);
         }
@@ -33,21 +54,34 @@ function App() {
 
     pollHealth(0);
     return () => { cancelled = true; };
+  }, [phase]);
+
+  const handleModelReady = useCallback(() => {
+    setPhase('starting-backend');
   }, []);
 
   const handleApplyAndExport = async (overrides: Record<string, boolean>) => {
     if (!state.docId) return;
-    
-    // Convert Record<string, boolean> to RedactRequestItem[]
     const fieldsToRedact = Object.entries(overrides).map(([id, redact]) => ({
       field_id: id,
       redact
     }));
-    
     await applyRedactions(fieldsToRedact);
   };
 
-  if (isBackendReady === null) {
+  if (phase === 'checking-model') {
+    return (
+      <div className="min-h-screen bg-surface flex items-center justify-center">
+        <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (phase === 'model-setup') {
+    return <ModelSetupScreen onReady={handleModelReady} />;
+  }
+
+  if (phase === 'starting-backend') {
     return (
       <div className="min-h-screen bg-surface flex flex-col items-center justify-center p-4 text-center">
         <div className="w-12 h-12 border-4 border-primary/30 border-t-primary rounded-full animate-spin mb-6"></div>
@@ -57,7 +91,7 @@ function App() {
     );
   }
 
-  if (isBackendReady === false) {
+  if (phase === 'backend-error') {
     return (
       <div className="min-h-screen bg-surface flex flex-col items-center justify-center p-4 text-center">
         <div className="w-16 h-16 bg-error/10 text-error rounded-full flex items-center justify-center mb-6">
@@ -67,7 +101,7 @@ function App() {
         </div>
         <h1 className="text-2xl font-bold text-on-surface mb-2">Backend Server Offline</h1>
         <p className="text-on-surface-variant max-w-md">
-          Could not connect to the backend after 30 seconds. Please restart the application.
+          Could not connect to the backend after 30 minutes. Please restart the application.
         </p>
       </div>
     );
