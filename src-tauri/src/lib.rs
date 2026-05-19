@@ -1,7 +1,5 @@
 use std::sync::Mutex;
-use tauri::Manager;
 use tauri_plugin_shell::process::CommandChild;
-
 mod sidecar;
 
 struct SidecarState {
@@ -53,17 +51,10 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 match sidecar::start_backend(&handle).await {
                     Ok(()) => {
-                        // Backend is ready — show the main window
-                        if let Some(win) = handle.get_webview_window("main") {
-                            let _ = win.show();
-                        }
+                        log::info!("Backend started successfully");
                     }
                     Err(e) => {
                         log::error!("Failed to start backend: {}", e);
-                        // Still show the window so the user sees an error state
-                        if let Some(win) = handle.get_webview_window("main") {
-                            let _ = win.show();
-                        }
                     }
                 }
             });

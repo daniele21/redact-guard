@@ -42,9 +42,13 @@ app = FastAPI(
 )
 
 # CORS
+cors_origins = config.cors_origins
+# In Tauri production mode, the WebView origin is tauri://localhost
+if "tauri://localhost" not in cors_origins:
+    cors_origins = cors_origins + ["tauri://localhost"]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=config.cors_origins,
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

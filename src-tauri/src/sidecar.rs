@@ -42,20 +42,20 @@ pub async fn start_backend(handle: &AppHandle) -> Result<(), String> {
         )
     };
 
+    // Store ports in state immediately so the frontend can read them
+    let state = handle.state::<SidecarState>();
+    *state.api_port.lock().unwrap() = api_port;
+    *state.llm_port.lock().unwrap() = llm_port;
+
     log::info!("Starting LLM server on port {}", llm_port);
     start_llm_server(handle, llm_port).await?;
 
     log::info!("Starting API server on port {}", api_port);
-    start_api_server(handle, api_port).await?;
+    start_api_server(handle, api_port, llm_port).await?;
 
     // Wait for API to be healthy
     wait_for_health(api_port).await?;
     log::info!("Backend is ready on port {}", api_port);
-
-    // Store ports in state
-    let state = handle.state::<SidecarState>();
-    *state.api_port.lock().unwrap() = api_port;
-    *state.llm_port.lock().unwrap() = llm_port;
 
     Ok(())
 }
@@ -112,9 +112,10 @@ async fn start_llm_server(handle: &AppHandle, port: u16) -> Result<(), String> {
     Ok(())
 }
 
-async fn start_api_server(handle: &AppHandle, port: u16) -> Result<(), String> {
+async fn start_api_server(handle: &AppHandle, port: u16, llm_port: u16) -> Result<(), String> {
     let root = project_root(handle);
     let port_str = port.to_string();
+    let llm_endpoint = format!("http://127.0.0.1:{}/api/v1/chat", llm_port);
 
     let sidecar_cmd = if cfg!(debug_assertions) {
         let python = root.join(".venv/bin/python");
@@ -135,6 +136,7 @@ async fn start_api_server(handle: &AppHandle, port: u16) -> Result<(), String> {
             .sidecar("redactguard-server")
             .map_err(|e| format!("Failed to create API sidecar: {}", e))?
             .args(["api", "--port", &port_str])
+            .env("LLM_ENDPOINT", &llm_endpoint)
     };
 
     let (mut rx, child) = sidecar_cmd

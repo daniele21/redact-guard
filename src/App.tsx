@@ -12,9 +12,27 @@ function App() {
   const [isBackendReady, setIsBackendReady] = useState<boolean | null>(null);
 
   useEffect(() => {
-    api.health()
-      .then(() => setIsBackendReady(true))
-      .catch(() => setIsBackendReady(false));
+    let cancelled = false;
+    const maxAttempts = 30;
+    const interval = 1000;
+
+    async function pollHealth(attempt: number) {
+      if (cancelled) return;
+      try {
+        await api.health();
+        if (!cancelled) setIsBackendReady(true);
+      } catch {
+        if (cancelled) return;
+        if (attempt >= maxAttempts) {
+          setIsBackendReady(false);
+        } else {
+          setTimeout(() => pollHealth(attempt + 1), interval);
+        }
+      }
+    }
+
+    pollHealth(0);
+    return () => { cancelled = true; };
   }, []);
 
   const handleApplyAndExport = async (overrides: Record<string, boolean>) => {
@@ -29,6 +47,16 @@ function App() {
     await applyRedactions(fieldsToRedact);
   };
 
+  if (isBackendReady === null) {
+    return (
+      <div className="min-h-screen bg-surface flex flex-col items-center justify-center p-4 text-center">
+        <div className="w-12 h-12 border-4 border-primary/30 border-t-primary rounded-full animate-spin mb-6"></div>
+        <h1 className="text-xl font-semibold text-on-surface mb-2">Starting RedactGuard...</h1>
+        <p className="text-on-surface-variant text-sm">Loading AI model and backend services</p>
+      </div>
+    );
+  }
+
   if (isBackendReady === false) {
     return (
       <div className="min-h-screen bg-surface flex flex-col items-center justify-center p-4 text-center">
@@ -39,7 +67,7 @@ function App() {
         </div>
         <h1 className="text-2xl font-bold text-on-surface mb-2">Backend Server Offline</h1>
         <p className="text-on-surface-variant max-w-md">
-          Make sure the FastAPI backend is running on <code className="bg-surface-container px-2 py-1 rounded">localhost:8000</code>.
+          Could not connect to the backend after 30 seconds. Please restart the application.
         </p>
       </div>
     );
