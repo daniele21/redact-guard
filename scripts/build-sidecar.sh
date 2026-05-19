@@ -88,6 +88,10 @@ PYTHON_BIN="$RESOURCES_DIR/python/bin/python3"
 if [ ! -f "$PYTHON_BIN" ]; then
     PYTHON_BIN="$RESOURCES_DIR/python/bin/python3.13"
 fi
+# Windows: python-build-standalone puts the binary at python/python.exe
+if [ ! -f "$PYTHON_BIN" ]; then
+    PYTHON_BIN="$RESOURCES_DIR/python/python.exe"
+fi
 echo "   Python binary: $PYTHON_BIN"
 "$PYTHON_BIN" --version
 
@@ -95,8 +99,13 @@ echo "   Python binary: $PYTHON_BIN"
 echo ""
 echo "🔧 Creating isolated virtual environment..."
 "$PYTHON_BIN" -m venv "$RESOURCES_DIR/python/venv"
-VENV_PIP="$RESOURCES_DIR/python/venv/bin/pip"
-VENV_PYTHON="$RESOURCES_DIR/python/venv/bin/python"
+if [[ "$PLATFORM" == *"windows"* ]]; then
+    VENV_PIP="$RESOURCES_DIR/python/venv/Scripts/pip"
+    VENV_PYTHON="$RESOURCES_DIR/python/venv/Scripts/python"
+else
+    VENV_PIP="$RESOURCES_DIR/python/venv/bin/pip"
+    VENV_PYTHON="$RESOURCES_DIR/python/venv/bin/python"
+fi
 
 "$VENV_PIP" install --upgrade pip --quiet
 
@@ -104,10 +113,13 @@ VENV_PYTHON="$RESOURCES_DIR/python/venv/bin/python"
 echo ""
 echo "📦 Installing Python dependencies..."
 
-# Install llama-cpp-python with Metal support on macOS
+# Install llama-cpp-python with platform-specific acceleration
 if [[ "$PLATFORM" == *"apple-darwin"* ]]; then
     echo "   🍎 Building llama-cpp-python with Metal acceleration..."
     CMAKE_ARGS="-DGGML_METAL=on" "$VENV_PIP" install --no-cache-dir llama-cpp-python
+elif [[ "$PLATFORM" == *"windows"* ]]; then
+    echo "   🪟 Installing llama-cpp-python (CPU)..."
+    "$VENV_PIP" install --no-cache-dir llama-cpp-python
 else
     "$VENV_PIP" install --no-cache-dir llama-cpp-python
 fi
@@ -121,67 +133,30 @@ mkdir -p "$RESOURCES_DIR/backend"
 cp -r "$PROJECT_ROOT/anonimizer/"* "$RESOURCES_DIR/backend/"
 cp "$PROJECT_ROOT/config.json" "$RESOURCES_DIR/backend/"
 
-# Step 6: Create the sidecar launcher script
+# Step 6: Build the Rust sidecar launcher
 echo ""
-echo "🚀 Creating sidecar launcher..."
+echo "🚀 Building Rust sidecar launcher..."
 
 SIDECAR_NAME="redactguard-server-${TAURI_TARGET}"
+SIDECAR_CRATE="$PROJECT_ROOT/sidecar"
 
-cat > "$BINARIES_DIR/$SIDECAR_NAME" << 'LAUNCHER_EOF'
-#!/bin/bash
-# RedactGuard Sidecar Launcher
-# This script is called by Tauri to start backend services.
+if [ ! -f "$SIDECAR_CRATE/Cargo.toml" ]; then
+    echo "❌ Sidecar crate not found at $SIDECAR_CRATE"
+    exit 1
+fi
 
-set -euo pipefail
+# Build the sidecar for the target platform
+cargo build --release --manifest-path "$SIDECAR_CRATE/Cargo.toml"
 
-# Resolve paths relative to the app bundle
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    # macOS: binary is in .app/Contents/MacOS/, resources in .app/Contents/Resources/
-    SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-    RESOURCES_DIR="$(cd "$SCRIPT_DIR/../Resources" 2>/dev/null && pwd || echo "$SCRIPT_DIR/../resources")"
+# Determine the compiled binary name (with .exe on Windows)
+if [[ "$PLATFORM" == *"windows"* ]]; then
+    COMPILED_BIN="$SIDECAR_CRATE/target/release/redactguard-server.exe"
+    cp "$COMPILED_BIN" "$BINARIES_DIR/${SIDECAR_NAME}.exe"
 else
-    SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-    RESOURCES_DIR="$SCRIPT_DIR/../resources"
+    COMPILED_BIN="$SIDECAR_CRATE/target/release/redactguard-server"
+    cp "$COMPILED_BIN" "$BINARIES_DIR/$SIDECAR_NAME"
+    chmod +x "$BINARIES_DIR/$SIDECAR_NAME"
 fi
-
-PYTHON_VENV="$RESOURCES_DIR/python/venv"
-PYTHON_BIN="$PYTHON_VENV/bin/python"
-BACKEND_DIR="$RESOURCES_DIR/backend"
-
-# Fallback for development
-if [ ! -d "$PYTHON_VENV" ]; then
-    PYTHON_BIN="$(dirname "$0")/../../.venv/bin/python"
-    BACKEND_DIR="$(dirname "$0")/../../anonimizer"
-fi
-
-export PYTHONPATH="$BACKEND_DIR"
-
-COMMAND="${1:-api}"
-shift || true
-
-case "$COMMAND" in
-    api)
-        PORT="${2:-8000}"
-        exec "$PYTHON_BIN" -m uvicorn main:app \
-            --host 127.0.0.1 \
-            --port "$PORT" \
-            --app-dir "$BACKEND_DIR" \
-            "$@"
-        ;;
-    llm)
-        PORT="${2:-1235}"
-        exec "$PYTHON_BIN" "$BACKEND_DIR/llama_cpp_server.py" \
-            --port "$PORT" \
-            "$@"
-        ;;
-    *)
-        echo "Usage: $0 {api|llm} [--port PORT]"
-        exit 1
-        ;;
-esac
-LAUNCHER_EOF
-
-chmod +x "$BINARIES_DIR/$SIDECAR_NAME"
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -190,4 +165,6 @@ echo ""
 echo "  Sidecar:   $BINARIES_DIR/$SIDECAR_NAME"
 echo "  Python:    $RESOURCES_DIR/python/"
 echo "  Backend:   $RESOURCES_DIR/backend/"
+echo ""
+echo "  ℹ️  Sidecar is a native Rust binary (cross-platform)"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
