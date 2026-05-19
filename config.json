@@ -24,7 +24,7 @@
     "max_file_size_mb": 50,
     "cache": {
       "enabled": true,
-      "cache_dir": ".cache/redactguard",
+      "cache_dir": "~/.cache/redactguard",
       "pdf_cache": {
         "enabled": true,
         "max_size_mb": 500,

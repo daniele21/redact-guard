@@ -7,6 +7,9 @@ from typing import Any
 ROOT_DIR = Path(__file__).parent.parent
 CONFIG_FILE = ROOT_DIR / "config.json"
 
+# Default cache directory: use XDG_CACHE_HOME or ~/.cache, always absolute
+_DEFAULT_CACHE_DIR = str(Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "redactguard")
+
 import logging
 
 def load_json_config() -> dict[str, Any]:
@@ -30,7 +33,7 @@ _llm_cache_conf = _cache_conf.get("llm_cache", {})
 class CacheConfig:
     """Centralized cache configuration."""
     enabled: bool = os.getenv("CACHE_ENABLED", str(_cache_conf.get("enabled", "true"))).lower() in {"1", "true", "yes", "on"}
-    cache_dir: str = os.getenv("CACHE_DIR", _cache_conf.get("cache_dir", ".cache/redactguard"))
+    cache_dir: str = str(Path(os.path.expanduser(os.getenv("CACHE_DIR", _cache_conf.get("cache_dir", "")) or _DEFAULT_CACHE_DIR)).resolve())
     
     pdf_cache_enabled: bool = os.getenv("PDF_CACHE_ENABLED", str(_pdf_cache_conf.get("enabled", "true"))).lower() in {"1", "true", "yes", "on"}
     pdf_cache_max_size_mb: int = int(os.getenv("PDF_CACHE_MAX_SIZE_MB", str(_pdf_cache_conf.get("max_size_mb", "500"))))
