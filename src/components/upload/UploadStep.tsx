@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { Upload, File as FileIcon, X, AlertCircle, Info, ChevronRight } from 'lucide-react';
+import { Upload, File as FileIcon, X, AlertCircle, Info, ChevronRight, FileText, HeartPulse, Landmark, Scale } from 'lucide-react';
 import { useProfiles } from '../../hooks/useProfiles';
 import { ProfileInfoModal } from './ProfileInfoModal';
 import { LandingHero } from '../landing/LandingHero';
@@ -74,6 +74,9 @@ export function UploadStep({ onAnalyze, isUploading }: UploadStepProps) {
       {/* Problem / Why section */}
       <LandingProblem />
 
+      {/* Steps */}
+      <LandingHowItWorks />
+
       {/* Main Tool Section */}
       <section className="py-12 px-4 max-w-5xl mx-auto w-full">
         <div className="bg-surface-container-lowest border border-outline-variant/50 rounded-[2.5rem] shadow-2xl shadow-primary/5 overflow-hidden">
@@ -81,66 +84,85 @@ export function UploadStep({ onAnalyze, isUploading }: UploadStepProps) {
             
             {/* Left: Configuration */}
             <div className="p-8 lg:p-12 bg-surface-container-low/50 border-r border-outline-variant/30">
-              <div className="mb-8">
-                <h2 className="text-xl font-bold text-on-surface mb-2 flex items-center gap-2">
+              <div className="mb-6">
+                <h2 className="text-xl font-bold text-on-surface mb-1 flex items-center gap-2">
                   <span className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center text-sm">1</span>
-                  Configure Detection
+                  What type of document is it?
                 </h2>
                 <p className="text-sm text-on-surface-variant">
-                  Select a profile to optimize the AI for your specific document type.
+                  Pick the profile closest to your document. The AI will know what to look for.
                 </p>
               </div>
 
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 gap-3">
-                  {profiles.map(p => (
+              {/* Profile cards */}
+              <div className="space-y-2">
+                {profiles.map(p => {
+                  const meta: Record<string, { icon: React.ReactNode; hint: string }> = {
+                    general:    { icon: <FileText className="w-5 h-5" />,    hint: 'Emails, CVs, letters, general forms' },
+                    financial:  { icon: <Landmark className="w-5 h-5" />,    hint: 'Bank statements, financial contracts, policies' },
+                    healthcare: { icon: <HeartPulse className="w-5 h-5" />,  hint: 'Medical reports, clinical records, prescriptions' },
+                    legal:      { icon: <Scale className="w-5 h-5" />,       hint: 'Contracts, deeds, minutes, NDAs' },
+                  };
+                  const m = meta[p.name] ?? { icon: <FileText className="w-5 h-5" />, hint: '' };
+                  const isSelected = profile === p.name;
+
+                  return (
                     <div key={p.name} className="relative group">
-                      <label 
+                      <label
                         className={`
-                          flex items-center gap-3 p-4 h-full rounded-2xl border transition-all duration-300
+                          flex items-center gap-4 p-4 rounded-2xl border transition-all duration-200
                           ${isUploading ? 'opacity-50 pointer-events-none' : 'cursor-pointer'}
-                          ${profile === p.name 
-                            ? 'bg-primary/5 border-primary text-primary shadow-sm ring-1 ring-primary/20' 
-                            : 'bg-surface border-outline-variant/50 text-on-surface hover:border-primary/40 hover:bg-surface-container-lowest'}
+                          ${isSelected
+                            ? 'bg-primary/5 border-primary shadow-sm ring-1 ring-primary/20'
+                            : 'bg-surface border-outline-variant/50 hover:border-primary/40 hover:bg-surface-container-lowest'}
                         `}
                       >
-                        <input 
-                          type="radio" 
-                          name="profile" 
-                          value={p.name} 
-                          checked={profile === p.name}
+                        <input
+                          type="radio"
+                          name="profile"
+                          value={p.name}
+                          checked={isSelected}
                           onChange={(e) => setProfile(e.target.value)}
                           disabled={isUploading}
                           className="hidden"
                         />
-                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors
-                          ${profile === p.name ? 'border-primary' : 'border-outline'}
-                        `}>
-                          {profile === p.name && <div className="w-2.5 h-2.5 rounded-full bg-primary animate-scale-in" />}
+
+                        {/* Icon */}
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-colors
+                          ${isSelected ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface-variant'}`}>
+                          {m.icon}
                         </div>
+
+                        {/* Text */}
                         <div className="flex-grow min-w-0">
-                          <span className="font-semibold capitalize block truncate">{p.display_name}</span>
-                          <span className="text-[11px] opacity-70 block mt-0.5">{p.pii_type_count} categories</span>
+                          <span className={`font-semibold block ${isSelected ? 'text-primary' : 'text-on-surface'}`}>
+                            {p.display_name}
+                          </span>
+                          <span className="text-xs text-on-surface-variant block mt-0.5 truncate">{m.hint}</span>
                         </div>
+
+                        {/* Category count */}
+                        <span className={`text-xs font-bold shrink-0 px-2 py-1 rounded-full
+                          ${isSelected ? 'bg-primary/10 text-primary' : 'bg-surface-container-high text-outline'}`}>
+                          {p.pii_type_count} types
+                        </span>
                       </label>
+
                       <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedInfoProfile(p.name);
-                        }}
+                        onClick={(e) => { e.stopPropagation(); setSelectedInfoProfile(p.name); }}
                         disabled={isUploading}
                         className={`
-                          absolute top-3 right-3 p-1.5 rounded-full transition-all
-                          ${profile === p.name ? 'text-primary hover:bg-primary/10' : 'text-outline hover:bg-surface-container-high'}
-                          ${isUploading ? 'opacity-0' : ''}
+                          absolute top-3.5 right-14 p-1.5 rounded-full transition-all opacity-0 group-hover:opacity-100
+                          ${isSelected ? 'text-primary hover:bg-primary/10' : 'text-outline hover:bg-surface-container-high'}
+                          ${isUploading ? '!opacity-0' : ''}
                         `}
                         title="View profile details"
                       >
-                        <Info className="w-4 h-4" />
+                        <Info className="w-3.5 h-3.5" />
                       </button>
                     </div>
-                  ))}
-                </div>
+                  );
+                })}
               </div>
 
               {selectedInfoProfile && (
@@ -269,9 +291,6 @@ export function UploadStep({ onAnalyze, isUploading }: UploadStepProps) {
           </div>
         </div>
       </section>
-
-      {/* Steps */}
-      <LandingHowItWorks />
 
       {/* Footer */}
       <LandingFooter />
