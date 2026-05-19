@@ -3,6 +3,7 @@ import { Upload, File as FileIcon, X, AlertCircle, Info, ChevronRight } from 'lu
 import { useProfiles } from '../../hooks/useProfiles';
 import { ProfileInfoModal } from './ProfileInfoModal';
 import { LandingHero } from '../landing/LandingHero';
+import { LandingProblem } from '../landing/LandingProblem';
 import { LandingHowItWorks } from '../landing/LandingHowItWorks';
 import { LandingFooter } from '../landing/LandingFooter';
 
@@ -69,6 +70,9 @@ export function UploadStep({ onAnalyze, isUploading }: UploadStepProps) {
     <div className="flex flex-col gap-0">
       {/* Hero Section */}
       <LandingHero />
+
+      {/* Problem / Why section */}
+      <LandingProblem />
 
       {/* Main Tool Section */}
       <section className="py-12 px-4 max-w-5xl mx-auto w-full">
@@ -266,7 +270,7 @@ export function UploadStep({ onAnalyze, isUploading }: UploadStepProps) {
         </div>
       </section>
 
-      {/* How it works section */}
+      {/* Steps */}
       <LandingHowItWorks />
 
       {/* Footer */}
