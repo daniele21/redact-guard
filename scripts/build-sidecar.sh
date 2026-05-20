@@ -101,13 +101,13 @@ echo "🔧 Creating isolated virtual environment..."
 "$PYTHON_BIN" -m venv "$RESOURCES_DIR/python/venv"
 if [[ "$PLATFORM" == *"windows"* ]]; then
     VENV_PIP="$RESOURCES_DIR/python/venv/Scripts/pip"
-    VENV_PYTHON="$RESOURCES_DIR/python/venv/Scripts/python"
+    VENV_PYTHON="$RESOURCES_DIR/python/venv/Scripts/python.exe"
 else
     VENV_PIP="$RESOURCES_DIR/python/venv/bin/pip"
     VENV_PYTHON="$RESOURCES_DIR/python/venv/bin/python"
 fi
 
-"$VENV_PIP" install --upgrade pip --quiet
+"$VENV_PYTHON" -m pip install --upgrade pip --quiet
 
 # Step 4: Install dependencies
 echo ""
