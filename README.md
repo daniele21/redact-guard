@@ -61,24 +61,9 @@ RedactGuard provides an end-to-end local workflow:
 6. **Apply deterministic replacements** to the selected fields.
 7. **Export an anonymized Markdown file** for safer downstream use.
 
-```mermaid
-flowchart LR
-    A[PDF on the user's device] --> B[Choose profile]
-    B --> C[Docling conversion]
-    C --> D[Local LLM detection]
-    D --> E[Visual human review]
-    E --> F[Selective redaction]
-    F --> G[Anonymized Markdown export]
-
-    subgraph LOCAL["User's machine"]
-      B
-      C
-      D
-      E
-      F
-      G
-    end
-```
+<p align="center">
+  <img src="./use-case.png" alt="RedactGuard usage workflow: upload a PDF, choose a profile, scan locally, review findings, select redactions, and export the anonymized file" width="100%" />
+</p>
 
 ### Typical use cases
 
@@ -193,32 +178,11 @@ The initial model download can contact Hugging Face. Once the model and dependen
 
 ## Architecture
 
-RedactGuard uses three local processes with explicit responsibilities.
+RedactGuard uses three local processes with explicit responsibilities. The frontend manages upload, review, and export; the FastAPI backend orchestrates document conversion, PII detection, redaction, profiles, sessions, and caching; and a dedicated local `llama-cpp-python` process hosts the GGUF model used for contextual detection.
 
-```mermaid
-graph TB
-    subgraph DEVICE["User's machine"]
-        UI[React + Vite frontend\nUpload · Review · Export]
-        API[FastAPI backend\nWorkflow and sessions]
-        PDF[Docling\nPDF to Markdown]
-        PII[PII detection service]
-        RED[Redaction engine]
-        PROFILE[Profile service]
-        EXPORT[Export service]
-        CACHE[(Local disk cache)]
-        LLM[llama-cpp-python\nLocal GGUF model]
-
-        UI -->|REST /api| API
-        API --> PDF
-        API --> PII
-        API --> RED
-        API --> PROFILE
-        API --> EXPORT
-        PDF <--> CACHE
-        PII <--> CACHE
-        PII -->|Local HTTP| LLM
-    end
-```
+<p align="center">
+  <img src="./redact-guard-architecture.png" alt="RedactGuard local-first architecture with React frontend, FastAPI backend, Docling conversion, PII detection, redaction services, cache, and local GGUF inference" width="100%" />
+</p>
 
 | Process | Default port | Responsibility |
 |---|---:|---|
