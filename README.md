@@ -1,14 +1,33 @@
 <div align="center">
-  <img width="1200" height="475" alt="RedactGuard" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
 
 # RedactGuard
 
 **Local-first, human-reviewed document anonymization for sensitive PDFs.**
 
-RedactGuard detects personal and sensitive information with a local LLM, lets the user review every finding, and exports a safer Markdown version without sending the document to a cloud AI provider.
+RedactGuard helps detect, review, and minimize personal or sensitive information before a document is shared with another person, system, or AI workflow. Document conversion, contextual PII detection, redaction, and export are designed to run locally, while the user keeps the final decision about what leaves the device.
 
-[How it works](#what-redactguard-does) · [Value](#the-value-it-adds) · [Run locally](#run-locally) · [Architecture](#architecture) · [Privacy](#privacy-and-data-lifecycle)
+[Mission](#part-of-a-broader-local-first-mission) · [How it works](#what-redactguard-does) · [Value](#the-value-it-adds) · [Architecture](#architecture) · [Privacy](#privacy-and-data-lifecycle) · [Run locally](#run-locally)
+
 </div>
+
+## Part of a broader local-first mission
+
+RedactGuard starts from a broader mission: **make AI useful without making the cloud the default destination for sensitive data.**
+
+Local-first is more than running a model on a laptop. It means designing products so that sensitive information stays close to the user whenever possible, processing boundaries are explicit, unnecessary data exposure is reduced, and the user keeps meaningful control over what leaves the device.
+
+RedactGuard applies that mission to documents and explores one concrete question:
+
+> **How can AI help understand and minimize sensitive information before a document is shared with another person, system, or AI workflow?**
+
+The answer is a local, human-reviewed pipeline: process the document on the user's machine, use a local LLM to surface likely sensitive information, let the user decide what should be redacted, and export only the minimized result.
+
+This makes RedactGuard a practical proving ground for four principles:
+
+- **Local by default** — sensitive document processing stays on the user's machine whenever possible.
+- **Privacy by architecture** — document processing does not require cloud inference or a remote document store.
+- **Human in control** — model findings are suggestions; review and redaction decisions stay with the user.
+- **Minimize before sharing** — reduce sensitive content before the document enters another workflow instead of sending the original by default.
 
 > [!IMPORTANT]
 > RedactGuard is an experimental privacy tool, not a legal compliance product. Local AI can miss, misclassify, or over-detect sensitive information. Every result must be reviewed by a person before the exported document is shared or relied upon.
@@ -44,20 +63,29 @@ RedactGuard provides an end-to-end local workflow:
 
 ```mermaid
 flowchart LR
-    A[PDF on the user's device] --> B[Docling conversion]
-    B --> C[Local LLM detection]
-    C --> D[Visual human review]
-    D --> E[Selective redaction]
-    E --> F[Anonymized Markdown export]
+    A[PDF on the user's device] --> B[Choose profile]
+    B --> C[Docling conversion]
+    C --> D[Local LLM detection]
+    D --> E[Visual human review]
+    E --> F[Selective redaction]
+    F --> G[Anonymized Markdown export]
 
-    subgraph LOCAL["Local machine"]
+    subgraph LOCAL["User's machine"]
       B
       C
       D
       E
       F
+      G
     end
 ```
+
+### Typical use cases
+
+- **Healthcare documents** — minimize identifiers and sensitive clinical or nutrition information before sharing.
+- **Legal documents** — review personal data in contracts, case materials, or other sensitive documents before downstream use.
+- **Financial documents** — redact account, identity, and personal information before analysis or transfer.
+- **AI workflows** — create a minimized version of a document before it is passed to another AI system that does not need the original sensitive fields.
 
 ## The value it adds
 
@@ -70,6 +98,8 @@ flowchart LR
 | Adapt to the document domain | Profiles focus the model on general, healthcare, legal, or financial information. |
 | Reduce repeated processing time | PDF conversion and LLM results are cached locally with configuration-aware keys and expiration policies. |
 | Make privacy operational | Local processing, minimization, review, deletion controls, and explicit export are combined in one workflow. |
+
+The key value is therefore not simply "running an LLM locally". RedactGuard combines **local inference + contextual detection + human review + data minimization** into a usable privacy workflow.
 
 ## Core capabilities
 
@@ -173,6 +203,8 @@ graph TB
         PDF[Docling\nPDF to Markdown]
         PII[PII detection service]
         RED[Redaction engine]
+        PROFILE[Profile service]
+        EXPORT[Export service]
         CACHE[(Local disk cache)]
         LLM[llama-cpp-python\nLocal GGUF model]
 
@@ -180,6 +212,8 @@ graph TB
         API --> PDF
         API --> PII
         API --> RED
+        API --> PROFILE
+        API --> EXPORT
         PDF <--> CACHE
         PII <--> CACHE
         PII -->|Local HTTP| LLM
@@ -284,8 +318,6 @@ Open `http://localhost:3000`.
 
 FastAPI documentation is available at `http://127.0.0.1:8000/docs`.
 
-No Gemini API key is required for the documented local inference flow.
-
 ## Desktop development
 
 Tauri packaging is under active development.
@@ -377,7 +409,9 @@ redact-guard/
 
 ## Project status and direction
 
-RedactGuard is an active experimental project and a reference implementation for privacy-first AI products.
+RedactGuard is an active experimental project and a **reference application of the broader local-first mission**: build AI products that can work with sensitive information while keeping data exposure, processing boundaries, and user control explicit.
+
+It is specifically the document-minimization proving ground within that direction. The project tests whether contextual local AI can become a practical privacy layer before sensitive content is shared with other people, systems, or AI services.
 
 Main next steps:
 
@@ -403,5 +437,5 @@ See [`CHANGELOG.md`](CHANGELOG.md) for implemented changes and [`docs/00-discove
 ---
 
 <div align="center">
-  <strong>RedactGuard</strong> explores how local AI, data minimization, and human review can work together before sensitive documents leave the user's control.
+  <strong>RedactGuard</strong> is one concrete expression of a broader local-first idea: useful AI should be able to work with sensitive data without making loss of control the default trade-off.
 </div>
