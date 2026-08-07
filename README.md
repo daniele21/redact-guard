@@ -1,4 +1,7 @@
 <div align="center">
+
+<img src="./docs/assets/branding/redactguard-logo.png" alt="RedactGuard — secure local document redaction" width="760" />
+
 # RedactGuard
 
 **Local-first, human-reviewed document anonymization for sensitive PDFs.**
