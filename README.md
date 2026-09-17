@@ -62,15 +62,17 @@ The design is intentionally modular:
 
 Changes to the profile or custom PII definitions also change the inference prompt and therefore the configuration-aware cache key. Old results are not silently reused with an incompatible taxonomy.
 
-> **🖼️ Visual placeholder — PII Taxonomy overview**  
-> Final asset: `docs/assets/screenshots/redactguard-pii-taxonomy.jpg`  
-> Show the real PII Taxonomy UI with base profiles plus custom definitions such as Employee ID, Client Code, and Internal Project Name. Edit/delete controls should be visible. The screenshot should make one thing obvious without reading the caption: **the user controls what RedactGuard considers sensitive.**
+<p align="center">
+  <img src="./docs/assets/screenshots/redactguard-pii-profile-healthcare.png" alt="Healthcare PII profile showing its detection taxonomy, descriptions, and examples" width="49%" />
+  <img src="./docs/assets/screenshots/redactguard-pii-settings.png" alt="RedactGuard PII settings with base profiles and self-service custom PII configuration" width="49%" />
+</p>
+<p align="center">
+  <sub><strong>Left:</strong> inspect the PII definitions contained in a domain profile. &nbsp;&nbsp; <strong>Right:</strong> extend the taxonomy with organization-specific PII without changing the detection engine.</sub>
+</p>
 
-> **🖼️ Visual placeholder — Edit a custom PII definition**  
-> Final asset: `docs/assets/screenshots/redactguard-pii-editor.jpg`  
-> Show one custom definition in edit mode with a friendly name, natural-language detection description, Save, and Cancel. The image should communicate that taxonomy maintenance is self-service, not a development task.
+The two views make the policy layer explicit: profiles define reusable detection strategies, while custom PII definitions let users adapt what RedactGuard treats as sensitive for their own context.
 
-The complete visual brief is documented in [`docs/00-discovery/03-configurable-pii-product-principle.md`](docs/00-discovery/03-configurable-pii-product-principle.md).
+The complete product rationale is documented in [`docs/00-discovery/03-configurable-pii-product-principle.md`](docs/00-discovery/03-configurable-pii-product-principle.md).
 
 ## Part of a broader local-first mission
 
