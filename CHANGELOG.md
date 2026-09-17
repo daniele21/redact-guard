@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2026-09-17]
+
+### Added
+- **Editable Custom PII Definitions**: Users can now edit or rename locally persisted custom PII definitions from the PII Taxonomy settings UI.
+- **Custom PII Update API**: Added `PATCH /api/profiles/custom-types/{name}` so custom definitions can be maintained without rewriting detection code.
+- **Configurable PII Product Principle**: Added product and visual guidance that positions the PII taxonomy as a maintainable policy layer separated from the anonymization engine.
+
+### Changed
+- Repositioned the README around configurable PII taxonomy as RedactGuard's primary adoption lever, with local-first processing and human review as supporting pillars.
+- Reworked the settings experience to explain base profiles, organization-specific PII definitions, and automatic propagation into subsequent analyses.
+- Added README visual placeholders for the PII taxonomy overview, PII definition editor, and configuration-to-detection proof screenshots.
+
 ## [2026-05-15]
 
 ### Added
