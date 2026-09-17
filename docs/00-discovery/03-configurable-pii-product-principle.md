@@ -76,28 +76,26 @@ Avoid exposing prompt-engineering terminology in the primary interaction. The de
 
 The README should eventually contain three purpose-built product images dedicated to this capability. Until final screenshots are available, the README contains explicit visual placeholders rather than broken image links.
 
-### Visual A — Taxonomy overview
+### Visual A — Taxonomy overview and custom PII settings
 
-**Target filename:** `docs/assets/screenshots/redactguard-pii-taxonomy.jpg`
+**Asset:** `docs/assets/screenshots/redactguard-pii-settings.png`
 
 **Purpose:** make the configurable taxonomy understandable in one glance.
 
 **Composition:**
 
 - full PII Taxonomy modal or settings page;
-- base profiles visible in the upper area;
-- custom PII definitions visible below;
-- at least three realistic custom definitions, for example `employee_id`, `client_code`, and `internal_project_name`;
-- edit and delete actions visible but secondary;
+- base profiles visible in the upper area (Financial, General, Healthcare, Legal);
+- custom PII definitions section visible below with self-service add controls;
 - short product callout: "PII definitions are configuration, not code."
 
-**What the reader should understand without reading the caption:** the user can control what RedactGuard considers sensitive.
+**What the reader should understand without reading the caption:** the user controls what RedactGuard considers sensitive.
 
-### Visual B — Edit a custom PII definition
+### Visual B — Inspect profile PII detection strategy
 
-**Target filename:** `docs/assets/screenshots/redactguard-pii-editor.jpg`
+**Asset:** `docs/assets/screenshots/redactguard-pii-profile-healthcare.png`
 
-**Purpose:** prove that maintenance is self-service rather than a development task.
+**Purpose:** prove that domain-specific detection rules and examples are inspectable and transparent.
 
 **Composition:**
 
