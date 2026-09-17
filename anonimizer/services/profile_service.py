@@ -106,6 +106,33 @@ def add_custom_type(name: str, description: str) -> PIITypeDefinition:
     return new_type
 
 
+def update_custom_type(current_name: str, name: str, description: str) -> PIITypeDefinition:
+    """Update or rename an existing custom PII type."""
+    existing = load_custom_types()
+    current_index = next(
+        (index for index, pii_type in enumerate(existing) if pii_type.name == current_name),
+        None,
+    )
+    if current_index is None:
+        raise FileNotFoundError(f"Custom type '{current_name}' not found")
+
+    if name != current_name and any(t.name == name for t in existing):
+        raise ValueError(f"Custom type '{name}' already exists")
+
+    updated = PIITypeDefinition(
+        name=name,
+        description=description,
+        label=name.replace("_", " ").title(),
+        color="pii-custom",
+        icon="Tag",
+        examples=existing[current_index].examples,
+        is_custom=True,
+    )
+    existing[current_index] = updated
+    save_custom_types(existing)
+    return updated
+
+
 def remove_custom_type(name: str) -> bool:
     """Remove a custom PII type by name. Returns True if found and removed."""
     existing = load_custom_types()
