@@ -130,9 +130,23 @@ export const api = {
     return res.json();
   },
 
+  updateCustomType: async (currentName: string, name: string, description: string): Promise<PIITypeDefinition> => {
+    const base = await getBase();
+    const res = await fetch(`${base}/profiles/custom-types/${encodeURIComponent(currentName)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, description })
+    });
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({ detail: 'Failed to update custom type' }));
+      throw new Error(error.detail || 'Failed to update custom type');
+    }
+    return res.json();
+  },
+
   removeCustomType: async (name: string): Promise<void> => {
     const base = await getBase();
-    const res = await fetch(`${base}/profiles/custom-types/${name}`, {
+    const res = await fetch(`${base}/profiles/custom-types/${encodeURIComponent(name)}`, {
       method: 'DELETE'
     });
     if (!res.ok) throw new Error('Failed to remove custom type');

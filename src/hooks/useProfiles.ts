@@ -50,6 +50,16 @@ export function useProfiles() {
     }
   };
 
+  const updateCustomType = async (currentName: string, name: string, description: string) => {
+    try {
+      const updatedType = await api.updateCustomType(currentName, name, description);
+      setCustomTypes(prev => prev.map(type => type.name === currentName ? updatedType : type));
+      return true;
+    } catch (err: any) {
+      throw new Error(err.message || 'Failed to update custom type');
+    }
+  };
+
   const removeCustomType = async (name: string) => {
     try {
       await api.removeCustomType(name);
@@ -67,6 +77,7 @@ export function useProfiles() {
     error,
     refresh: fetchData,
     addCustomType,
+    updateCustomType,
     removeCustomType
   };
 }

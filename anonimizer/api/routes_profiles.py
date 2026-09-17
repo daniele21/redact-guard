@@ -28,6 +28,21 @@ def add_custom_type(body: CustomTypeRequest):
         raise HTTPException(status_code=409, detail=str(exc))
 
 
+@router.patch("/profiles/custom-types/{name}", response_model=PIITypeDefinition)
+def update_custom_type(name: str, body: CustomTypeRequest):
+    """Edit or rename an existing user-defined custom PII type."""
+    try:
+        return profile_service.update_custom_type(
+            current_name=name,
+            name=body.name,
+            description=body.description,
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+
+
 @router.delete("/profiles/custom-types/{name}")
 def remove_custom_type(name: str):
     """Remove a custom PII type by name."""
