@@ -35,7 +35,7 @@ export interface UploadResponse {
 }
 
 export interface RedactRequestItem {
-  field_id: string; // Composite ID like: "{page}_{pii_type}_{value}"
+  field_id: string;
   redact: boolean;
 }
 
@@ -75,7 +75,8 @@ export interface ProfileDetail {
 
 export interface HealthResponse {
   status: string;
-  llm_status: string;
+  llm_status: 'online' | 'offline' | 'model_not_resident';
   model: string;
+  korgis_protocol_version: string | null;
   cache_stats: Record<string, any>;
 }

@@ -1,3 +1,6 @@
+> [!NOTE]
+> This document contains historical discovery context. Any references to an embedded `llama_cpp_server.py` or direct `llama-cpp-python` runtime are superseded by the approved Korgis boundary documented in [../KORGIS_RUNTIME.md](../KORGIS_RUNTIME.md).
+
 # RedactGuard — Project Brainstorm
 
 > Status: **Converged** — all major decisions resolved. See `01-solution-strategy.md` for consolidated direction.

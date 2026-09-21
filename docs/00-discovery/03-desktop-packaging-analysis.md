@@ -1,3 +1,6 @@
+> [!IMPORTANT]
+> **Historical packaging analysis.** The embedded `llama-cpp-python`/GGUF packaging assumptions below are superseded by the current architecture: RedactGuard bundles only its own frontend/backend, while Korgis is a separately managed local runtime. See [KORGIS_RUNTIME.md](../KORGIS_RUNTIME.md). The historical alternatives are retained for decision context.
+
 # RedactGuard — Desktop Packaging & Self-Install Analysis
 
 ## Obiettivo

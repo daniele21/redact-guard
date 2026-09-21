@@ -2,64 +2,61 @@
 
 ## Product Name
 
-**RedactGuard** — Local-first document anonymization.
+**RedactGuard** — local-first document anonymization with a configurable PII policy.
 
 ## Problem Statement
 
-Professionals handling sensitive documents (healthcare, legal, financial) need to anonymize PII before sharing, archiving, or forwarding. Existing solutions are cloud-based, introducing privacy risks — documents leave the user's machine and pass through third-party servers.
-
-There is no lightweight, local-first tool that:
-- Runs entirely on the user's machine
-- Uses a local LLM for intelligent PII detection
-- Provides a visual review flow before export
-- Exports clean, anonymized documents
+Professionals handling sensitive documents need to minimize PII before sharing or downstream AI processing without sending source documents to a cloud anonymization service. They also need the privacy policy to be maintainable without changing detection code.
 
 ## Target Users
 
-- Privacy-conscious professionals (nutritionists, doctors, lawyers, consultants)
-- Compliance officers preparing documents for sharing
-- Developers testing PII detection on local data
-- Anyone needing to redact sensitive information before sharing documents
+- privacy-conscious professionals in healthcare, legal, financial and consulting workflows;
+- compliance/privacy operators;
+- teams with organization-specific identifiers and sensitive categories;
+- developers evaluating local PII detection.
 
 ## Core Value Proposition
 
-**100% local, AI-powered document anonymization** — upload a PDF, review detected PII with visual highlights, toggle what to redact, and export a clean anonymized Markdown file. Nothing ever leaves your machine.
+**Maintainable privacy policy + local contextual detection + human review + deterministic minimization.**
 
-## Scope
+RedactGuard owns the document workflow and PII policy. **Korgis is the external local AI runtime authority**.
 
-### In scope (v1)
+## In scope
 
-- PDF upload and conversion to Markdown (via Docling)
-- AI-powered PII detection using a local LLM (Nemotron default, configurable)
-- Visual review interface with per-field redaction toggles
-- Color-coded PII categories (names, health data, dates, contacts, etc.)
-- Export anonymized document as `.md` file download
-- Multi-layer caching (PDF conversion + LLM inference)
-- Configurable design system (Tailwind v4 centralized tokens)
-- Configurable backend (model, ports, cache, timeouts)
+- PDF → Markdown through Docling;
+- built-in and custom PII taxonomies;
+- contextual PII detection through Korgis;
+- visual review and per-field redaction;
+- deterministic post-processing/redaction;
+- local caches and in-memory document sessions;
+- anonymized Markdown export.
 
-### Out of scope (v1)
+## Runtime Architecture
 
-- Cloud deployment
-- User accounts / authentication
-- PDF export (future enhancement)
-- Batch processing of multiple documents simultaneously
-- Document history / audit logs (future enhancement)
-- Custom PII type definitions by the user
+RedactGuard does **not** embed a model server or model downloader.
+
+- RedactGuard backend: policy, prompts, Docling, span resolution, review/redaction/cache/export.
+- Korgis: model registry, artifact download/verification, backend selection, model lifecycle, inference and runtime identity.
+- Boundary: OpenAI-compatible `POST /v1/chat/completions`.
+- Readiness/evidence: `GET /v1/models` and `GET /v1/runtime/identity`.
+- Default RedactGuard model key: `nemotron-nano-4b`.
+
+Current compatibility baseline: `daniele21/korgis@26a161dc0ef89a133c7a076d3a31544a274c1469` (`dev`).
 
 ## Success Criteria
 
-1. User can upload a PDF and see PII-highlighted results within the LLM inference time
-2. Re-uploading the same PDF returns results in <1 second (cache hit)
-3. User can toggle individual PII fields and see live preview of redacted text
-4. User can export a clean `.md` file with all selected fields redacted
-5. All processing happens locally — zero network requests to external services
-6. UI is minimal, modern, and requires no configuration to use
+1. PII workflow remains local after required artifacts are installed.
+2. RedactGuard never silently falls back to a different model/runtime.
+3. Korgis offline and model-not-resident states are explicit in the UI.
+4. Model/prompt/profile changes invalidate incompatible cache entries.
+5. Users can review and override every suggested redaction.
+6. Detection quality is measured independently through the RedactGuard local anonymization experiment.
 
 ## Technical Constraints
 
-- Must run on macOS (primary), Linux, and Windows
-- Local LLM inference via `llama-cpp-python` (GGUF models)
-- Python backend (FastAPI)
-- React frontend (Vite + Tailwind v4)
-- No external API calls, no cloud services, no databases
+- macOS primary; Linux/Windows architectural targets;
+- Python FastAPI backend;
+- React/Vite/Tailwind frontend;
+- Tauri desktop shell is experimental;
+- Korgis remains a separate local runtime, not a Python dependency or embedded server;
+- no cloud document-processing requirement and no application database.

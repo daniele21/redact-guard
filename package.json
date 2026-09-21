@@ -6,18 +6,17 @@
   "packageManager": "pnpm@9.15.4",
   "scripts": {
     "dev": "vite --port=3000 --host=0.0.0.0",
-    "server:llm": "./.venv/bin/python anonimizer/llama_cpp_server.py",
     "server:api": "REDACTGUARD_DEV=1 cd anonimizer && ../.venv/bin/python main.py",
-    "start": "concurrently -t \"HH:mm:ss.SSS\" -n LLM,API,WEB -c \"magenta,cyan,blue\" \"pnpm server:llm\" \"pnpm server:api\" \"pnpm dev\"",
+    "start": "concurrently -t \"HH:mm:ss.SSS\" -n API,WEB -c \"cyan,blue\" \"pnpm server:api\" \"pnpm dev\"",
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "clean-cache": "./.venv/bin/python scripts/manage_cache.py",
+    "test:backend": "./.venv/bin/python -m unittest discover -s anonimizer/tests -p 'test_*.py'",
     "lint": "tsc --noEmit",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
-    "tauri:build-sidecar": "bash scripts/build-sidecar.sh",
-    "tauri:download-model": "python3 scripts/download-model.py"
+    "tauri:build-sidecar": "bash scripts/build-sidecar.sh"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",

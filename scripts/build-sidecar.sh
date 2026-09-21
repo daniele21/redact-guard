@@ -1,14 +1,4 @@
 #!/bin/bash
-# =============================================================================
-# RedactGuard — Build script for packaging the Python backend as a sidecar
-#
-# This script:
-# 1. Downloads python-build-standalone for the target platform
-# 2. Creates an isolated venv with all dependencies
-# 3. Creates a launcher script that acts as the sidecar binary
-# 4. Places everything in src-tauri/binaries/ for Tauri bundling
-# =============================================================================
-
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -17,36 +7,31 @@ TAURI_DIR="$PROJECT_ROOT/src-tauri"
 BINARIES_DIR="$TAURI_DIR/binaries"
 RESOURCES_DIR="$TAURI_DIR/resources"
 
-# Python build standalone version
 PYTHON_VERSION="3.13.2"
 PBS_RELEASE="20250212"
 
-# Detect platform
 detect_platform() {
     local os arch
     case "$(uname -s)" in
         Darwin) os="apple-darwin" ;;
-        Linux)  os="unknown-linux-gnu" ;;
+        Linux) os="unknown-linux-gnu" ;;
         MINGW*|MSYS*|CYGWIN*) os="pc-windows-msvc" ;;
         *) echo "❌ Unsupported OS: $(uname -s)"; exit 1 ;;
     esac
-
     case "$(uname -m)" in
         arm64|aarch64) arch="aarch64" ;;
-        x86_64|amd64)  arch="x86_64" ;;
+        x86_64|amd64) arch="x86_64" ;;
         *) echo "❌ Unsupported architecture: $(uname -m)"; exit 1 ;;
     esac
-
     echo "${arch}-${os}"
 }
 
-# Get Tauri target triple (used for sidecar naming)
 get_tauri_target() {
     case "$(uname -s)-$(uname -m)" in
-        Darwin-arm64)    echo "aarch64-apple-darwin" ;;
-        Darwin-x86_64)   echo "x86_64-apple-darwin" ;;
-        Linux-x86_64)    echo "x86_64-unknown-linux-gnu" ;;
-        Linux-aarch64)   echo "aarch64-unknown-linux-gnu" ;;
+        Darwin-arm64) echo "aarch64-apple-darwin" ;;
+        Darwin-x86_64) echo "x86_64-apple-darwin" ;;
+        Linux-x86_64) echo "x86_64-unknown-linux-gnu" ;;
+        Linux-aarch64) echo "aarch64-unknown-linux-gnu" ;;
         MINGW*-x86_64|MSYS*-x86_64) echo "x86_64-pc-windows-msvc" ;;
         *) echo "❌ Unsupported platform"; exit 1 ;;
     esac
@@ -57,114 +42,49 @@ TAURI_TARGET=$(get_tauri_target)
 PBS_URL="https://github.com/indygreg/python-build-standalone/releases/download/${PBS_RELEASE}/cpython-${PYTHON_VERSION}+${PBS_RELEASE}-${PLATFORM}-install_only_stripped.tar.gz"
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "  RedactGuard Sidecar Build"
+echo "  RedactGuard API Sidecar Build"
 echo "  Platform: $PLATFORM"
 echo "  Python: $PYTHON_VERSION"
+echo "  Korgis: external runtime (not bundled)"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-# Clean previous builds
 rm -rf "$RESOURCES_DIR/python" "$RESOURCES_DIR/backend" "$BINARIES_DIR"
 mkdir -p "$RESOURCES_DIR" "$BINARIES_DIR"
 
-# Step 1: Download Python standalone
 PYTHON_ARCHIVE="$RESOURCES_DIR/python-standalone.tar.gz"
-if [ ! -f "$PYTHON_ARCHIVE" ]; then
-    echo ""
-    echo "📥 Downloading Python $PYTHON_VERSION standalone..."
-    echo "   URL: $PBS_URL"
-    curl -L --progress-bar -o "$PYTHON_ARCHIVE" "$PBS_URL"
-else
-    echo "✅ Python archive already downloaded"
-fi
+curl -L --progress-bar -o "$PYTHON_ARCHIVE" "$PBS_URL"
 
-# Step 2: Extract Python
-echo ""
-echo "📦 Extracting Python..."
 mkdir -p "$RESOURCES_DIR/python"
 tar -xzf "$PYTHON_ARCHIVE" -C "$RESOURCES_DIR/python" --strip-components=1
 rm -f "$PYTHON_ARCHIVE"
 
 PYTHON_BIN="$RESOURCES_DIR/python/bin/python3"
-if [ ! -f "$PYTHON_BIN" ]; then
-    PYTHON_BIN="$RESOURCES_DIR/python/bin/python3.13"
-fi
-# Windows: python-build-standalone puts the binary at python/python.exe
-if [ ! -f "$PYTHON_BIN" ]; then
-    PYTHON_BIN="$RESOURCES_DIR/python/python.exe"
-fi
-echo "   Python binary: $PYTHON_BIN"
-"$PYTHON_BIN" --version
+if [ ! -f "$PYTHON_BIN" ]; then PYTHON_BIN="$RESOURCES_DIR/python/bin/python3.13"; fi
+if [ ! -f "$PYTHON_BIN" ]; then PYTHON_BIN="$RESOURCES_DIR/python/python.exe"; fi
 
-# Step 3: Create venv
-echo ""
-echo "🔧 Creating isolated virtual environment..."
 "$PYTHON_BIN" -m venv "$RESOURCES_DIR/python/venv"
 if [[ "$PLATFORM" == *"windows"* ]]; then
-    VENV_PIP="$RESOURCES_DIR/python/venv/Scripts/pip"
     VENV_PYTHON="$RESOURCES_DIR/python/venv/Scripts/python.exe"
 else
-    VENV_PIP="$RESOURCES_DIR/python/venv/bin/pip"
     VENV_PYTHON="$RESOURCES_DIR/python/venv/bin/python"
 fi
 
 "$VENV_PYTHON" -m pip install --upgrade pip --quiet
+"$VENV_PYTHON" -m pip install --no-cache-dir -r "$PROJECT_ROOT/anonimizer/requirements.txt"
 
-# Step 4: Install dependencies
-echo ""
-echo "📦 Installing Python dependencies..."
-
-# Install llama-cpp-python with platform-specific acceleration
-if [[ "$PLATFORM" == *"apple-darwin"* ]]; then
-    echo "   🍎 Building llama-cpp-python with Metal acceleration..."
-    CMAKE_ARGS="-DGGML_METAL=on" "$VENV_PIP" install --no-cache-dir llama-cpp-python
-elif [[ "$PLATFORM" == *"windows"* ]]; then
-    echo "   🪟 Installing llama-cpp-python (CPU)..."
-    "$VENV_PIP" install --no-cache-dir llama-cpp-python
-else
-    "$VENV_PIP" install --no-cache-dir llama-cpp-python
-fi
-
-"$VENV_PIP" install --no-cache-dir -r "$PROJECT_ROOT/anonimizer/requirements.txt"
-
-# Step 5: Copy backend code
-echo ""
-echo "📋 Copying backend source..."
 mkdir -p "$RESOURCES_DIR/backend"
 cp -r "$PROJECT_ROOT/anonimizer/"* "$RESOURCES_DIR/backend/"
 cp "$PROJECT_ROOT/config.json" "$RESOURCES_DIR/backend/"
 
-# Step 6: Build the Rust sidecar launcher
-echo ""
-echo "🚀 Building Rust sidecar launcher..."
-
 SIDECAR_NAME="redactguard-server-${TAURI_TARGET}"
 SIDECAR_CRATE="$PROJECT_ROOT/sidecar"
-
-if [ ! -f "$SIDECAR_CRATE/Cargo.toml" ]; then
-    echo "❌ Sidecar crate not found at $SIDECAR_CRATE"
-    exit 1
-fi
-
-# Build the sidecar for the target platform
 cargo build --release --manifest-path "$SIDECAR_CRATE/Cargo.toml"
 
-# Determine the compiled binary name (with .exe on Windows)
 if [[ "$PLATFORM" == *"windows"* ]]; then
-    COMPILED_BIN="$SIDECAR_CRATE/target/release/redactguard-server.exe"
-    cp "$COMPILED_BIN" "$BINARIES_DIR/${SIDECAR_NAME}.exe"
+    cp "$SIDECAR_CRATE/target/release/redactguard-server.exe" "$BINARIES_DIR/${SIDECAR_NAME}.exe"
 else
-    COMPILED_BIN="$SIDECAR_CRATE/target/release/redactguard-server"
-    cp "$COMPILED_BIN" "$BINARIES_DIR/$SIDECAR_NAME"
+    cp "$SIDECAR_CRATE/target/release/redactguard-server" "$BINARIES_DIR/$SIDECAR_NAME"
     chmod +x "$BINARIES_DIR/$SIDECAR_NAME"
 fi
 
-echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "  ✅ Sidecar build complete!"
-echo ""
-echo "  Sidecar:   $BINARIES_DIR/$SIDECAR_NAME"
-echo "  Python:    $RESOURCES_DIR/python/"
-echo "  Backend:   $RESOURCES_DIR/backend/"
-echo ""
-echo "  ℹ️  Sidecar is a native Rust binary (cross-platform)"
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "✅ Sidecar build complete. Korgis remains a separately managed local runtime."

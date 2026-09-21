@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-09-21 — Korgis runtime boundary
+
+- Migrated active PII inference from RedactGuard's embedded `llama_cpp_server.py` to external Korgis.
+- Adopted `/v1/chat/completions`, `/v1/models`, and `/v1/runtime/identity`.
+- Added explicit Korgis-offline and model-not-resident startup states.
+- Removed RedactGuard-owned GGUF download/runtime setup from the active desktop and development paths.
+- Pinned the tested compatibility baseline to `daniele21/korgis@26a161dc0ef89a133c7a076d3a31544a274c1469`.
+- Added backend contract tests and linked the companion local anonymization benchmark.
+
 All notable changes to this project will be documented in this file.
 
 ## [2026-09-17]
