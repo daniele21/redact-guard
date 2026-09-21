@@ -83,8 +83,12 @@ async fn start_api_server(handle: &AppHandle, port: u16) -> Result<(), String> {
     tauri::async_runtime::spawn(async move {
         while let Some(event) = rx.recv().await {
             match event {
-                CommandEvent::Stdout(line) => log::info!("[API] {}", String::from_utf8_lossy(&line)),
-                CommandEvent::Stderr(line) => log::warn!("[API] {}", String::from_utf8_lossy(&line)),
+                CommandEvent::Stdout(line) => {
+                    log::info!("[API] {}", String::from_utf8_lossy(&line));
+                }
+                CommandEvent::Stderr(line) => {
+                    log::warn!("[API] {}", String::from_utf8_lossy(&line));
+                }
                 CommandEvent::Terminated(payload) => {
                     log::info!("[API] Process terminated: {:?}", payload);
                     break;

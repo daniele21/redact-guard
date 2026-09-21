@@ -10,7 +10,10 @@ fn main() -> ExitCode {
     let args: Vec<String> = env::args().collect();
     let subcommand = args.get(1).map(|s| s.as_str()).unwrap_or("api");
     if subcommand != "api" {
-        eprintln!("Unknown subcommand: {}. Only 'api' is supported.", subcommand);
+        eprintln!(
+            "Unknown subcommand: {}. Only 'api' is supported.",
+            subcommand
+        );
         return ExitCode::FAILURE;
     }
     let port = parse_port(&args);
@@ -88,9 +91,18 @@ fn production_candidates(exe_dir: &Path) -> Vec<(PathBuf, PathBuf)> {
     let win_resources = exe_dir.join("resources");
 
     vec![
-        (macos_resources.join("python/venv/bin/python"), macos_resources.join("backend")),
-        (linux_resources.join(python_venv_bin()), linux_resources.join("backend")),
-        (win_resources.join(python_venv_bin()), win_resources.join("backend")),
+        (
+            macos_resources.join("python/venv/bin/python"),
+            macos_resources.join("backend"),
+        ),
+        (
+            linux_resources.join(python_venv_bin()),
+            linux_resources.join("backend"),
+        ),
+        (
+            win_resources.join(python_venv_bin()),
+            win_resources.join("backend"),
+        ),
     ]
 }
 
@@ -99,24 +111,45 @@ fn dev_candidates(exe_dir: &Path) -> Vec<(PathBuf, PathBuf)> {
     let from_target = exe_dir.join("../../..");
 
     vec![
-        (from_binaries.join(dev_venv_bin()), from_binaries.join("anonimizer")),
-        (from_target.join(dev_venv_bin()), from_target.join("anonimizer")),
+        (
+            from_binaries.join(dev_venv_bin()),
+            from_binaries.join("anonimizer"),
+        ),
+        (
+            from_target.join(dev_venv_bin()),
+            from_target.join("anonimizer"),
+        ),
     ]
 }
 
 fn python_venv_bin() -> &'static str {
-    if cfg!(windows) { "python/venv/Scripts/python.exe" } else { "python/venv/bin/python" }
+    if cfg!(windows) {
+        "python/venv/Scripts/python.exe"
+    } else {
+        "python/venv/bin/python"
+    }
 }
 
 fn dev_venv_bin() -> &'static str {
-    if cfg!(windows) { ".venv/Scripts/python.exe" } else { ".venv/bin/python" }
+    if cfg!(windows) {
+        ".venv/Scripts/python.exe"
+    } else {
+        ".venv/bin/python"
+    }
 }
 
 fn build_command(python_bin: &Path, backend_dir: &Path, port: u16) -> Command {
     let port_str = port.to_string();
     let mut cmd = Command::new(python_bin);
     cmd.args([
-        "-m", "uvicorn", "main:app", "--host", "127.0.0.1", "--port", &port_str, "--app-dir",
+        "-m",
+        "uvicorn",
+        "main:app",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        &port_str,
+        "--app-dir",
     ]);
     cmd.arg(backend_dir);
     cmd
