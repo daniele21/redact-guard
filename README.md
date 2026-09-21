@@ -235,7 +235,7 @@ RedactGuard is local-first by architecture, but local processing does not mean d
 | PII findings | In-memory session and optional local cache | Session- and cache-bound | Review, override, or clear cache |
 | Custom PII definitions | Local application data | Persist across sessions | Add, edit, rename, or delete through settings/API |
 | Exported Markdown | User's local filesystem | Persists until deleted | Full filesystem control |
-| GGUF model | Local model directory | Persists for reuse | Replace or delete the model |
+| Korgis model artifacts | Korgis-managed local artifact store | Persist for reuse according to Korgis policy | Manage through Korgis |
 
 Default privacy properties:
 
@@ -257,7 +257,7 @@ Korgis may contact the configured artifact source when a model is downloaded. On
 RedactGuard uses a frontend and FastAPI application backend plus a separately managed Korgis runtime. The frontend manages taxonomy configuration, upload, review, and export; the FastAPI backend owns document conversion, PII policy/profile management, prompting, deterministic post-processing, redaction, sessions, and caching; Korgis owns local model artifacts, model lifecycle, backend selection, inference, and runtime identity.
 
 <p align="center">
-  <img src="./redact-guard-architecture.png" alt="RedactGuard local-first architecture with configurable PII taxonomy, React frontend, FastAPI backend, Docling conversion, PII detection, redaction services, cache, and local GGUF inference" width="100%" />
+  <img src="./redact-guard-architecture.png" alt="RedactGuard local-first architecture; this asset should be regenerated to show Korgis as the external local inference runtime" width="100%" />
 </p>
 
 | Process | Default port | Responsibility |
@@ -309,7 +309,7 @@ chmod +x setup_env.sh
 ./setup_env.sh
 ```
 
-The script creates `.venv`, installs the backend dependencies, and enables Metal support for `llama-cpp-python` on macOS.
+The script creates `.venv` and installs only the RedactGuard backend dependencies. Korgis and its inference backend are managed separately.
 
 ### 3. Install frontend dependencies
 
@@ -383,7 +383,7 @@ Hardware- and backend-specific model settings belong to Korgis. RedactGuard keep
 
 | Method | Endpoint | Purpose |
 |---|---|---|
-| `GET` | `/api/health` | Backend, LLM, and cache health |
+| `GET` | `/api/health` | Backend, Korgis/model, and cache health |
 | `POST` | `/api/upload` | Upload and convert a PDF |
 | `POST` | `/api/analyze/{doc_id}/page/{page}` | Analyze one page |
 | `POST` | `/api/analyze/{doc_id}` | Analyze the full document |
@@ -416,7 +416,7 @@ redact-guard/
 │   ├── services/                # Profiles, conversion, Korgis client, redaction, export, sessions
 │   └── main.py                  # FastAPI entrypoint
 ├── src-tauri/                   # Experimental desktop packaging
-├── scripts/                     # Model, cache, and build utilities
+├── scripts/                     # Cache and build utilities
 ├── product/                     # Product intent and requirements
 ├── docs/00-discovery/           # Strategy, architecture, product principles, delivery analysis
 ├── config.json                  # Shared runtime configuration
