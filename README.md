@@ -97,7 +97,7 @@ RedactGuard provides an end-to-end workflow:
 1. **Configure the PII taxonomy** — use a base profile and maintain custom definitions.
 2. **Import a PDF** and select the closest detection profile.
 3. **Convert the document to structured Markdown** with Docling.
-4. **Analyze selected pages or the full document** with a local GGUF model using the active taxonomy.
+4. **Analyze selected pages or the full document** through Korgis using the active taxonomy and configured local model.
 5. **Highlight detected sensitive fields** by category and page.
 6. **Review each finding** and choose what should be redacted.
 7. **Apply deterministic replacements** to the selected fields.
@@ -185,11 +185,12 @@ Custom PII definitions can be maintained through the UI and API. They are persis
 
 ### Local AI processing
 
-- GGUF inference through `llama-cpp-python`;
-- NVIDIA Nemotron 3 Nano 4B Q4_K_M as the default model;
-- configurable model path and inference parameters;
-- local HTTP endpoints used by the application backend;
-- no cloud inference required for document processing.
+- Korgis is the single external local runtime authority;
+- RedactGuard calls the OpenAI-compatible `POST /v1/chat/completions` boundary;
+- `nemotron-nano-4b` is the default Korgis model key and can be changed with `KORGIS_MODEL`;
+- model download, verification, backend selection and lifecycle stay inside Korgis;
+- RedactGuard records Korgis readiness through `/v1/models` and `/v1/runtime/identity`;
+- no cloud inference is required for document processing.
 
 ### Structured document extraction
 
@@ -246,14 +247,14 @@ Default privacy properties:
 - caches can be cleared by namespace or in full;
 - no user account, cloud database, or remote document store is required.
 
-The initial model download can contact Hugging Face. Once the model and dependencies are available, the document-processing workflow is designed to remain local.
+Korgis may contact the configured artifact source when a model is downloaded. Once the Korgis runtime and model artifacts are available, the document-processing workflow is designed to remain local.
 
 > [!NOTE]
 > Do not place the cache directory on shared or network-mounted storage when handling sensitive documents. Clear the cache after high-sensitivity sessions when local persistence is not desired.
 
 ## Architecture
 
-RedactGuard uses three local processes with explicit responsibilities. The frontend manages taxonomy configuration, upload, review, and export; the FastAPI backend orchestrates document conversion, PII policy/profile management, detection, redaction, sessions, and caching; and a dedicated local `llama-cpp-python` process hosts the GGUF model used for contextual detection.
+RedactGuard uses a frontend and FastAPI application backend plus a separately managed Korgis runtime. The frontend manages taxonomy configuration, upload, review, and export; the FastAPI backend owns document conversion, PII policy/profile management, prompting, deterministic post-processing, redaction, sessions, and caching; Korgis owns local model artifacts, model lifecycle, backend selection, inference, and runtime identity.
 
 <p align="center">
   <img src="./redact-guard-architecture.png" alt="RedactGuard local-first architecture with configurable PII taxonomy, React frontend, FastAPI backend, Docling conversion, PII detection, redaction services, cache, and local GGUF inference" width="100%" />
@@ -263,14 +264,14 @@ RedactGuard uses three local processes with explicit responsibilities. The front
 |---|---:|---|
 | React/Vite frontend | `3000` | PII taxonomy settings, upload, profile selection, review, redaction controls, and export UI |
 | FastAPI backend | `8000` | Profiles/custom PII, sessions, conversion, analysis, redaction, cache, and export |
-| Local LLM server | `1235` | GGUF model loading and local contextual inference |
+| Korgis | `1235` | Local model lifecycle, OpenAI-compatible inference, and runtime identity |
 
 ### Technology stack
 
 - **Frontend:** React 19, TypeScript, Vite, Tailwind CSS v4, Motion, Lucide;
 - **Backend:** Python 3.13, FastAPI, Pydantic;
 - **Document processing:** Docling;
-- **Local inference:** `llama-cpp-python` and GGUF;
+- **Local inference:** Korgis public HTTP boundary (`/v1/chat/completions`) with its managed local backends/models;
 - **PII taxonomy:** YAML base profiles plus locally persisted custom definitions;
 - **Caching:** `diskcache`;
 - **Desktop packaging:** Tauri 2, currently experimental.
@@ -285,8 +286,8 @@ The source workflow is currently optimized for macOS development, particularly A
 - Node.js 20+;
 - pnpm 9;
 - Python 3.13;
-- sufficient RAM for the selected GGUF model;
-- the native build tools required by `llama-cpp-python` and Docling.
+- sufficient RAM for the selected Korgis model;
+- a recent Korgis checkout/runtime plus the native dependencies required by the selected Korgis backend and Docling.
 
 On macOS:
 
@@ -316,30 +317,20 @@ The script creates `.venv`, installs the backend dependencies, and enables Metal
 pnpm install
 ```
 
-### 4. Provide a GGUF model
+### 4. Start Korgis
 
-Download the default model:
+RedactGuard does not embed Korgis and does not download models itself. The integration is currently tested against Korgis `dev` commit `26a161dc0ef89a133c7a076d3a31544a274c1469`.
 
-```bash
-pnpm tauri:download-model
-```
-
-The default destination is:
-
-```text
-~/.redactguard/models/NVIDIA-Nemotron-3-Nano-4B-Q4_K_M.gguf
-```
-
-Point the LLM server to it:
+From a separate Korgis checkout:
 
 ```bash
-export NEMOTRON_GGUF_PATH="$HOME/.redactguard/models/NVIDIA-Nemotron-3-Nano-4B-Q4_K_M.gguf"
+git checkout 26a161dc0ef89a133c7a076d3a31544a274c1469
+uv sync --frozen --extra dev
+uv run --frozen local-llm download nemotron-nano-4b
+uv run --frozen local-llm serve --model nemotron-nano-4b --no-download
 ```
 
-Another compatible model can be used by changing `NEMOTRON_GGUF_PATH`. Shared runtime defaults are defined in [`config.json`](config.json).
-
-> [!WARNING]
-> The default downloader does not currently enforce SHA-256 verification unless a hash is explicitly supplied. Verify model artifacts independently before using them in sensitive or production-like workflows.
+Korgis should expose `http://127.0.0.1:1235/v1`. See [`docs/KORGIS_RUNTIME.md`](docs/KORGIS_RUNTIME.md) for the runtime contract and model-switching rules.
 
 ### 5. Start the stack
 
@@ -347,11 +338,12 @@ Another compatible model can be used by changing `NEMOTRON_GGUF_PATH`. Shared ru
 pnpm start
 ```
 
-This starts:
+This starts only RedactGuard-owned processes:
 
-- LLM server: `http://127.0.0.1:1235`;
 - FastAPI backend: `http://127.0.0.1:8000`;
 - Vite frontend: `http://localhost:3000`.
+
+Korgis must already be running separately at `http://127.0.0.1:1235`.
 
 Open `http://localhost:3000`.
 
@@ -375,20 +367,17 @@ Most runtime settings live in [`config.json`](config.json) and can be overridden
 
 | Variable | Purpose |
 |---|---|
-| `NEMOTRON_GGUF_PATH` | Absolute path to the local GGUF model |
-| `NEMOTRON_PROXY_HOST` | LLM server bind address |
-| `NEMOTRON_PROXY_PORT` | LLM server port |
-| `LLAMA_CPP_CTX_SIZE` | Model context size |
+| `KORGIS_BASE_URL` | Korgis OpenAI-compatible base URL; default `http://127.0.0.1:1235/v1` |
+| `KORGIS_MODEL` | Korgis registry/model key; default `nemotron-nano-4b` |
 | `CACHE_ENABLED` | Enable or disable all caches |
 | `CACHE_DIR` | Local cache directory |
 | `PDF_CACHE_TTL_DAYS` | PDF conversion cache lifetime |
 | `LLM_CACHE_TTL_DAYS` | LLM result cache lifetime |
 | `SESSION_TTL_MINUTES` | Idle session lifetime |
 | `MAX_FILE_SIZE_MB` | Maximum accepted PDF size |
-| `LLM_ENDPOINT` | Backend local-inference endpoint |
 | `LLM_TIMEOUT` | LLM request timeout |
 
-The hardware values in `config.json` reflect the original development environment. Adjust GPU layers, thread count, batch sizes, and context size for your hardware.
+Hardware- and backend-specific model settings belong to Korgis. RedactGuard keeps only application-level runtime selection, timeout and cache configuration.
 
 ## API overview
 
@@ -424,8 +413,7 @@ redact-guard/
 │   ├── data/                    # Locally persisted custom PII definitions
 │   ├── domain/                  # Models and PII types
 │   ├── pii_profiles/            # General, healthcare, legal, financial profiles
-│   ├── services/                # Profiles, conversion, detection, redaction, export, sessions
-│   ├── llama_cpp_server.py      # Local GGUF inference server
+│   ├── services/                # Profiles, conversion, Korgis client, redaction, export, sessions
 │   └── main.py                  # FastAPI entrypoint
 ├── src-tauri/                   # Experimental desktop packaging
 ├── scripts/                     # Model, cache, and build utilities
@@ -445,7 +433,7 @@ redact-guard/
 - detection quality depends on model, quantization, prompt, language, taxonomy quality, and document structure;
 - OCR and chart extraction depend on Docling's conversion quality;
 - false positives and false negatives are possible;
-- the default model can be demanding for low-memory hardware;
+- the selected Korgis model can be demanding for low-memory hardware;
 - document history and a formal audit trail are not implemented;
 - multi-document batch processing is not implemented;
 - authentication is absent because the current model is local single-user;
@@ -466,7 +454,7 @@ Main next steps:
 - benchmark detection quality across domains, custom definitions, and model quantizations;
 - add regression datasets for false positives and false negatives;
 - export a redacted PDF while preserving layout;
-- complete cryptographically verified model distribution;
+- keep RedactGuard compatibility validated against current Korgis runtime/model identities;
 - harden Tauri packaging across operating systems;
 - improve cleanup, deletion, and audit visibility.
 

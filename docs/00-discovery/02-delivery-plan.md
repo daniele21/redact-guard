@@ -1,9 +1,18 @@
 # RedactGuard — Delivery Plan
 
-> Status: **Ready for implementation**
+> Status: **Active** — Korgis runtime migration is the current architecture baseline.
 > Dependencies: Solution strategy approved (see `01-solution-strategy.md`)
 
 ## Overview
+
+### Runtime migration slice — 2026-09
+
+- RedactGuard owns policy, prompts, document processing, deterministic span resolution, review and redaction.
+- Korgis owns model artifacts, backend selection, lifecycle, inference and runtime identity.
+- Remove active `llama_cpp_server.py`/GGUF downloader paths and route inference through `/v1/chat/completions`.
+- Surface Korgis offline and model-not-resident states explicitly in the UI.
+- Validate against `daniele21/korgis@26a161dc0ef89a133c7a076d3a31544a274c1469`.
+
 
 The implementation is divided into **4 phases**, each producing a testable, self-contained increment. Phases are sequential — each builds on the previous one.
 
@@ -43,13 +52,13 @@ gantt
 | 1.5 | **FastAPI bootstrap** | Create `main.py` with CORS, lifespan, error handling | Running server on `:8000` |
 | 1.6 | **Upload endpoint** | `POST /api/upload` — accept PDF + profile, convert via Docling (cached), return pages | PDF → MD working via API |
 | 1.7 | **Profiles API** | `GET /api/profiles`, `GET /api/profiles/{name}`, custom types CRUD | Profile management endpoints |
-| 1.8 | **Health endpoint** | `GET /api/health` — check LLM server reachability + cache stats | Health check working |
+| 1.8 | **Health endpoint** | `GET /api/health` — check Korgis reachability, configured-model residency, runtime identity + cache stats | Health check working |
 
 ### Dependencies
 
 - `diskcache`, `pyyaml` (new Python dependencies)
 - `fastapi`, `uvicorn`, `python-multipart` (new Python dependencies)
-- Existing: `docling`, `llama-cpp-python`
+- Existing: `docling`; Korgis is a separately installed/runtime-managed dependency, not a Python package dependency
 
 ### Definition of done
 
@@ -60,7 +69,7 @@ gantt
 - [ ] `prompt_builder.py` generates system prompt from profile + custom types
 - [ ] Custom PII types CRUD persists to `data/custom_pii_types.json`
 - [ ] `POST /api/upload` accepts PDF + profile, returns `{doc_id, pages[], profile}`
-- [ ] `GET /api/health` returns LLM status
+- [ ] `GET /api/health` returns explicit Korgis/model readiness and identity protocol
 - [ ] Requirements updated (`requirements.txt`)
 
 ---
@@ -83,7 +92,7 @@ gantt
 ### Dependencies
 
 - Phase 1 complete
-- LLM server running on `:1235`
+- Korgis running on `:1235` with the configured `KORGIS_MODEL` resident
 
 ### Definition of done
 
@@ -213,18 +222,23 @@ gantt
 
 ## Startup Model
 
-Ora puoi avviare l'intero sistema con un unico comando:
+Korgis is started separately because it is the shared local runtime authority:
+
+```bash
+cd ../korgis
+git checkout 26a161dc0ef89a133c7a076d3a31544a274c1469
+uv sync --frozen --extra dev
+uv run --frozen local-llm download nemotron-nano-4b
+uv run --frozen local-llm serve --model nemotron-nano-4b --no-download
+```
+
+Then RedactGuard starts only its own API and UI:
 
 ```bash
 pnpm start
 ```
 
-Questo comando usa `concurrently` per gestire i tre processi:
-1.  **LLM Server**: `cd anonimizer && python llama_cpp_server.py`
-2.  **Backend API**: `cd anonimizer && uvicorn main:app --port 8000 --reload`
-3.  **Frontend**: `pnpm dev` (port 3000)
-
-Poi apri `http://localhost:3000` nel browser.
+Tauri similarly starts only the RedactGuard API sidecar. It never spawns or downloads a second LLM runtime.
 
 ---
 
@@ -232,7 +246,7 @@ Poi apri `http://localhost:3000` nel browser.
 
 | Risk | Phase | Impact | Mitigation |
 |------|-------|--------|------------|
-| LLM inference too slow on CPU | 2 | Poor UX | Cache, progress bar, GPU recommendation in docs |
+| Local inference too slow | 2 | Poor UX | Select/benchmark appropriate Korgis model/backend, cache results, show progress |
 | Docling fails on complex PDFs | 1 | Lost pages | Graceful error per page, warning in UI |
 | LLM returns malformed JSON | 2 | Analysis fails | Robust parsing already exists, add retry with backoff |
 | Large PDFs exceed memory | 1 | Crash | Configurable file size limit (default 50MB) |

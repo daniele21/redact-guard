@@ -4,52 +4,45 @@
 
 ## 1. Architecture Overview
 
-### 3-process local architecture
+### RedactGuard + external Korgis local architecture
 
 ```mermaid
 graph TB
-    subgraph "User's Machine — 100% Local"
-        subgraph "Frontend — Vite + React :3000"
-            UI[React SPA<br/>Upload → Review → Export]
-        end
-        
-        subgraph "Backend — Python FastAPI :8000"
-            API[FastAPI Server]
-            PDF[PDF Converter<br/>Docling]
-            PII[PII Detector<br/>LLM Client]
-            RED[Redaction Engine]
-            EXP[Export Service]
-            CACHE[(Cache Layer<br/>diskcache)]
-        end
-        
-        subgraph "LLM Engine :1235"
-            LLM[llama-cpp-python<br/>Nemotron GGUF]
-        end
-        
-        UI -- "HTTP REST /api/*" --> API
+    subgraph "User's Machine — local processing"
+        UI[React / Tauri UI]
+        API[RedactGuard FastAPI]
+        PDF[Docling]
+        PII[PII policy + prompt + span resolution]
+        CACHE[(diskcache)]
+        K[Korgis :1235]
+        MODEL[Local model artifact/backend]
+
+        UI -->|/api/*| API
         API --> PDF
         API --> PII
-        API --> RED
-        API --> EXP
         PDF -.-> CACHE
         PII -.-> CACHE
-        PII -- "cache miss only" --> LLM
+        PII -->|POST /v1/chat/completions| K
+        K --> MODEL
     end
 ```
 
 | Process | Tech | Port | Role |
-|---------|------|------|------|
-| **LLM Server** | `llama_cpp_server.py` (existing) | `:1235` | Loads GGUF model, serves inference |
-| **Backend API** | FastAPI (new) | `:8000` | Orchestrates PDF→MD→PII→Redact→Export |
-| **Frontend** | Vite dev server | `:3000` | React SPA, proxies `/api` to `:8000` |
+|---|---|---:|---|
+| **Korgis** | external local runtime | `:1235` | Model registry, artifacts, lifecycle, backend selection, inference, runtime identity |
+| **Backend API** | FastAPI | `:8000` | PDF→MD→PII policy/prompt→span resolution→redaction→export |
+| **Frontend** | Vite/React or Tauri WebView | `:3000` in dev | Configuration, upload, review and export |
 
 ### Key architectural choices
 
-- **No database** — in-memory document sessions with auto-cleanup
-- **No WebSockets** — sequential REST calls with frontend polling
-- **Disk-persistent cache** — `diskcache` (SQLite-backed), survives server restarts
-- **Modular Python backend** — domain/services/utils/api/cache layers
-- **Centralized design tokens** — Tailwind v4 `@theme` + TypeScript config
+- **Korgis is the only model runtime authority** — RedactGuard does not embed `llama-cpp-python`, GGUF download logic or a private model server.
+- **Public HTTP boundary only** — inference uses `POST /v1/chat/completions`; readiness/evidence use `GET /v1/models` and `GET /v1/runtime/identity`.
+- **No silent substitution** — RedactGuard requests a configured Korgis model key and exposes offline/not-resident states.
+- **No database** — in-memory document sessions with auto-cleanup.
+- **Disk-persistent cache** — `diskcache` survives application restarts; model + prompt + policy remain part of cache identity.
+- **Human review remains authoritative** — model findings are suggestions, deterministic redaction happens after review.
+
+Current compatibility baseline: `daniele21/korgis@26a161dc0ef89a133c7a076d3a31544a274c1469` (`dev`).
 
 ---
 
@@ -62,8 +55,6 @@ anonimizer/
 ├── __init__.py
 ├── config.py                    # All configuration: ports, model, cache, timeouts
 ├── main.py                      # FastAPI app entrypoint + CORS + lifespan
-├── llama_cpp_server.py          # Existing — LLM inference server (separate process)
-│
 ├── pii_profiles/                # YAML profile definitions
 │   ├── healthcare.yaml          # Medical/clinical PII types
 │   ├── legal.yaml               # Legal/contractual PII types
@@ -84,7 +75,7 @@ anonimizer/
 ├── services/
 │   ├── __init__.py
 │   ├── pdf_converter.py         # PDF → Markdown pages via Docling (cached)
-│   ├── pii_detector.py          # LLM-based PII detection (cached)
+│   ├── pii_detector.py          # Korgis-backed PII detection (cached)
 │   ├── profile_service.py       # Profile CRUD: load YAML, merge custom types, save
 │   ├── prompt_builder.py        # Dynamic system prompt from active profile + custom types
 │   ├── redaction_engine.py      # Apply redactions, generate redacted text
@@ -111,7 +102,7 @@ anonimizer/
 
 | Method | Path | Description | Response |
 |--------|------|-------------|----------|
-| `GET` | `/api/health` | Health + LLM reachability | `{ok, llm_status, model, cache_stats}` |
+| `GET` | `/api/health` | Backend + Korgis/model readiness | `{status, llm_status, model, korgis_protocol_version, cache_stats}` |
 | `POST` | `/api/upload` | Upload PDF → convert to MD | `{doc_id, page_count, pages[], profile}` |
 | `POST` | `/api/analyze/{doc_id}/page/{n}` | Analyze one page | `{page_number, pii_fields[], has_pii, cache_hit}` |
 | `POST` | `/api/analyze/{doc_id}` | Analyze all pages (batch) | `{pages[{page_number, pii_fields[], cache_hit}]}` |
@@ -135,7 +126,7 @@ sequenceDiagram
     participant FE as Frontend
     participant API as FastAPI
     participant CACHE as Cache
-    participant LLM as LLM Server
+    participant LLM as Korgis
     
     U->>FE: Drops PDF file
     FE->>API: POST /api/upload (multipart PDF)
@@ -154,7 +145,7 @@ sequenceDiagram
         alt Cache HIT ⚡
             CACHE-->>API: Cached pii_fields[]
         else Cache MISS
-            API->>LLM: POST /api/v1/chat (page text)
+            API->>LLM: POST /v1/chat/completions (profile prompt + page text)
             LLM-->>API: Raw LLM response
             API->>API: Parse JSON, coerce spans
             API->>CACHE: Store pii_fields
@@ -204,11 +195,11 @@ class AppConfig:
     port: int = 8000
     cors_origins: list[str] = field(default_factory=lambda: ["http://localhost:3000"])
 
-    # LLM
-    llm_endpoint: str = "http://localhost:1235/api/v1/chat"
-    llm_model: str = "nvidia/nemotron-3-nano-4b"
+    # Korgis runtime boundary
+    korgis_base_url: str = "http://127.0.0.1:1235/v1"
+    korgis_model: str = "nemotron-nano-4b"
     llm_timeout: int = 600
-    llm_max_output_tokens: int | None = None
+    llm_max_output_tokens: int = 1024
 
     # Cache
     cache_enabled: bool = True
@@ -589,6 +580,7 @@ The system prompt is part of the LLM cache key: `sha256(prompt + text + model)`.
 | PDF export in v1 | Non-trivial, adds large dependencies. Markdown is sufficient for MVP. |
 | Database (SQLite/Postgres) | No persistence needed. In-memory sessions with auto-cleanup suffice. |
 | Cloud LLM fallback | Violates core privacy promise. |
+| Embedded RedactGuard LLM server | Duplicates lifecycle, artifact and backend responsibility already owned by Korgis. |
 | Full PII type CRUD editor in v1 | Too complex. Profile selector + custom type addition covers all cases. |
 
 ---
@@ -600,7 +592,7 @@ The system prompt is part of the LLM cache key: `sha256(prompt + text + model)`.
 | LLM inference is slow on CPU | 10-60s per page | Cache eliminates re-analysis. Progress bar keeps user informed. |
 | In-memory sessions are volatile | Server restart loses active sessions | Cache preserves analysis results. User can re-upload and get instant results. |
 | No PDF export | Some users may want PDF | Markdown is portable. PDF export can be added in v2. |
-| Single-model default | Nemotron may not be best for all document types | Configurable model selection. Users can swap GGUF files. |
+| Single-model default | Nemotron may not be best for all document types | `KORGIS_MODEL` is configurable and the benchmark compares Korgis-managed local models. |
 | Cache stores PII on disk | Security concern if machine is shared | `.gitignored`, TTL auto-expire, manual clear button, local-only directory. |
 | Custom types can confuse the LLM | Poorly defined types may produce bad results | Clear description guidance in UI, validation on backend |
 
@@ -608,7 +600,7 @@ The system prompt is part of the LLM cache key: `sha256(prompt + text + model)`.
 
 ## 8. Security & Privacy Baseline
 
-- **Zero external network calls** — all processing local
+- **No cloud document inference** — document content is processed by local RedactGuard + local Korgis; Korgis may use the network only when explicitly acquiring model artifacts
 - **No persistent storage of documents** — sessions are ephemeral (in-memory)
 - **Cache is local disk only** — `.gitignored`, auto-expires, user can clear
 - **No authentication needed** — localhost-only, single-user
