@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from pydantic import BaseModel, Field
 
+from domain.detection import DetectionDiagnostics
+
 @dataclass
 class PageMarkdown:
     page_number: int
@@ -62,6 +64,7 @@ class PageAnalysisResult(BaseModel):
     redacted_text: str
     warning: str | None = None
     cache_hit: bool = False
+    diagnostics: DetectionDiagnostics | None = None
 
 @dataclass
 class DocumentSession:
