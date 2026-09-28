@@ -185,6 +185,16 @@ Custom PII definitions can be maintained through the UI and API. They are persis
 
 ### Local AI processing
 
+RedactGuard uses the versioned `redactguard-detection-v2` inference contract. The
+model returns only `pii_type + exact value`; labels, descriptions and redaction
+placeholders are derived deterministically by RedactGuard. Invalid JSON, invalid schema,
+backend errors and output truncation are explicit failures — they are never converted
+into a normal "no PII found" result.
+
+Long pages are segmented deterministically before inference and merged back to page
+offsets. The default application budgets are 4,000 characters per segment, 256
+characters of overlap and 4,096 output tokens, all configurable.
+
 - Korgis is the single external local runtime authority;
 - RedactGuard calls the OpenAI-compatible `POST /v1/chat/completions` boundary;
 - `nemotron-nano-4b` is the default Korgis model key and can be changed with `KORGIS_MODEL`;
@@ -376,6 +386,9 @@ Most runtime settings live in [`config.json`](config.json) and can be overridden
 | `SESSION_TTL_MINUTES` | Idle session lifetime |
 | `MAX_FILE_SIZE_MB` | Maximum accepted PDF size |
 | `LLM_TIMEOUT` | LLM request timeout |
+| `LLM_MAX_OUTPUT_TOKENS` | Maximum structured-output tokens per inference segment; default `4096` |
+| `LLM_CHUNK_MAX_CHARS` | Maximum characters per model inference segment; default `4000` |
+| `LLM_CHUNK_OVERLAP_CHARS` | Character overlap between long-page segments; default `256` |
 
 Hardware- and backend-specific model settings belong to Korgis. RedactGuard keeps only application-level runtime selection, timeout and cache configuration.
 
