@@ -1,29 +1,26 @@
-name: Temporary local deps export
+name: Temporary local rust toolchain export
 on:
   push:
     branches: [main]
     paths:
       - ".github/workflows/local-source-export.yml"
 jobs:
-  deps:
+  rust-deps:
     runs-on: ubuntu-latest
+    env:
+      CARGO_HOME: ${{ github.workspace }}/.ci-cargo
+      RUSTUP_HOME: ${{ github.workspace }}/.ci-rustup
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.13"
-      - run: python -m venv .ci-venv
-      - run: .ci-venv/bin/python -m pip install "pydantic>=2.7" "diskcache>=5.6.3" "pyyaml>=6.0.1" "fastapi>=0.111"
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-      - run: pnpm install --frozen-lockfile
+      - run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -o /tmp/rustup.sh
+          sh /tmp/rustup.sh -y --profile minimal --default-toolchain stable
+          "$CARGO_HOME/bin/rustup" component add rustfmt
       - uses: actions/upload-artifact@v4
         with:
-          name: local-ci-deps
+          name: local-rust-toolchain
           path: |
-            .ci-venv
-            node_modules
+            .ci-cargo
+            .ci-rustup
           include-hidden-files: true
           retention-days: 1
