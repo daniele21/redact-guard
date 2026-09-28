@@ -1,6 +1,6 @@
 # RedactGuard detection contract v2 — implementation plan
 
-Status: planned  
+Status: implemented baseline; benchmark validation pending  
 Owner: RedactGuard product detection boundary  
 Related benchmark plan: `daniele21/experiments/experiments/redactguard-local-anonymization/REMEDIATION_PLAN.md`
 
@@ -18,9 +18,25 @@ RedactGuard must own the canonical PII policy, prompt/output contract, parsing,
 segmentation and span-resolution semantics. External evaluations must consume that
 contract rather than reimplementing it.
 
+## Current implementation
+
+The baseline implementation is now present on `main`:
+
+- strict typed model-output parsing;
+- minimal `pii_type + value` response contract;
+- typed Korgis/transport/truncation failures;
+- cache-after-validation semantics;
+- deterministic long-page segmentation with overlap and global offset merge;
+- inference diagnostics on successful page analysis;
+- contextual built-in policy semantics documented in
+  [`04-built-in-pii-policy.md`](04-built-in-pii-policy.md).
+
+The remaining validation step is representative execution against the benchmark model
+matrix, especially Qwen through Korgis `llama_server`.
+
 ## Target contract
 
-Introduce a versioned contract, initially:
+The versioned contract is:
 
 ```text
 redactguard-detection-v2
@@ -201,26 +217,30 @@ Before merging v2:
 
 ## Rollout order
 
-### Phase A — safety first
+### Phase A — safety first — DONE
 
-Implement typed parsing/failure semantics and stop silent zero-PII fallback.
+Typed parsing/failure semantics are implemented and the silent zero-PII fallback has
+been removed.
 
-### Phase B — compact contract
+### Phase B — compact contract — DONE
 
-Move to the minimal model-facing schema and deterministic derived fields.
+The model-facing schema now contains only `pii_type` and `value`; presentation
+metadata is derived deterministically.
 
-### Phase C — observability
+### Phase C — observability — DONE (baseline)
 
-Capture termination, usage, latency and resolution diagnostics.
+Termination, usage, latency and resolution diagnostics are captured on successful
+analysis and typed errors are surfaced on failure.
 
-### Phase D — long-input robustness
+### Phase D — long-input robustness — DONE
 
-Add bounded page sub-chunking.
+Bounded deterministic page sub-chunking and overlap de-duplication are implemented.
 
-### Phase E — policy freeze
+### Phase E — policy freeze — DONE for built-in v2 semantics
 
-Resolve ambiguous PII categories, version the final profile semantics and publish the
-contract snapshot consumed by the benchmark.
+Contextual sensitivity rules are documented in `04-built-in-pii-policy.md`. The
+experiments repository pins the resulting contract/profile snapshot. Independent human
+review of the realistic benchmark gold remains separate benchmark work.
 
 ## Boundary with experiments
 
