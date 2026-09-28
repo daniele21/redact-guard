@@ -103,7 +103,19 @@ class AppConfig:
     llm_max_output_tokens: int = int(
         os.getenv(
             "LLM_MAX_OUTPUT_TOKENS",
-            str(_server_conf.get("llm_max_output_tokens", "1024")),
+            str(_server_conf.get("llm_max_output_tokens", "4096")),
+        )
+    )
+    llm_chunk_max_chars: int = int(
+        os.getenv(
+            "LLM_CHUNK_MAX_CHARS",
+            str(_server_conf.get("llm_chunk_max_chars", "4000")),
+        )
+    )
+    llm_chunk_overlap_chars: int = int(
+        os.getenv(
+            "LLM_CHUNK_OVERLAP_CHARS",
+            str(_server_conf.get("llm_chunk_overlap_chars", "256")),
         )
     )
 
