@@ -44,6 +44,12 @@ def segment_text(
         segments.append(TextSegment(start=start, end=end, text=text[start:end]))
         if end >= text_len:
             break
-        start = max(0, end - overlap_chars)
+
+        next_start = max(0, end - overlap_chars)
+        if next_start <= start:
+            # A large overlap combined with a nearby word/newline boundary can
+            # otherwise keep the cursor on the same position forever.
+            next_start = end
+        start = next_start
 
     return segments
