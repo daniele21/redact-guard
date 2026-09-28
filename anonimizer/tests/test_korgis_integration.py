@@ -33,12 +33,12 @@ class KorgisInferenceContractTests(unittest.TestCase):
             {"choices": [{"message": {"content": '{"pii_fields":[]}'}}]}
         )
         with patch(
-            "services.pii_detector.urllib.request.urlopen",
+            "services.korgis_client.urllib.request.urlopen",
             return_value=response,
         ) as mocked:
-            content = call_local_llm("system prompt", "document text")
+            result = call_local_llm("system prompt", "document text")
 
-        self.assertEqual(content, '{"pii_fields":[]}')
+        self.assertEqual(result.content, '{"pii_fields":[]}')
         request = mocked.call_args.args[0]
         self.assertEqual(request.full_url, config.llm_endpoint)
 
