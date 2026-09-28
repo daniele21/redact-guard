@@ -102,6 +102,15 @@ class SegmentationTests(unittest.TestCase):
             self.assertLess(right.start, left.end)
             self.assertGreater(right.end, left.end)
 
+    def test_high_overlap_still_advances(self):
+        text = ("A" * 10) + " Mario Rossi\n" + ("B" * 40)
+        segments = segment_text(text, max_chars=30, overlap_chars=20)
+
+        self.assertGreater(len(segments), 1)
+        self.assertLess(len(segments), len(text))
+        for left, right in zip(segments, segments[1:]):
+            self.assertGreater(right.start, left.start)
+
 
 class DetectionPipelineTests(unittest.TestCase):
     def test_model_metadata_is_derived_deterministically(self):
