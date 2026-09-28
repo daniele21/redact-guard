@@ -9,7 +9,7 @@ pii_types:
     icon: "User"
   private_email:
     label: "Email"
-    description: "Email address identifying or contacting a party."
+    description: "Email/contact address associated with a party or protected legal record, including shared business addresses when they are the record contact field."
     examples: ["avv.rossi@studio.it", "segreteria@tribunale.it"]
     color: "pii-contact"
     icon: "Mail"
@@ -33,7 +33,7 @@ pii_types:
     icon: "Calendar"
   account_number:
     label: "Account/ID"
-    description: "Fiscal code, VAT number, case number, contract ID, or document reference."
+    description: "Fiscal/tax/VAT identifier, case number, contract ID, filing number, document reference, or comparable identifier that identifies or links a party or protected legal record."
     examples: ["CF: RSSMRA85M01H501Z", "P.IVA 12345678901", "RG n. 1234/2024"]
     color: "pii-secret"
     icon: "CreditCard"
