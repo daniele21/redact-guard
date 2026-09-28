@@ -3,11 +3,16 @@
     "host": "127.0.0.1",
     "port": 8000,
     "frontend_port": 3000,
-    "cors_origins": ["http://localhost:3000", "http://127.0.0.1:3000"],
+    "cors_origins": [
+      "http://localhost:3000",
+      "http://127.0.0.1:3000"
+    ],
     "korgis_base_url": "http://127.0.0.1:1235/v1",
     "korgis_model": "nemotron-nano-4b",
     "llm_timeout": 600,
-    "llm_max_output_tokens": 1024
+    "llm_max_output_tokens": 4096,
+    "llm_chunk_max_chars": 4000,
+    "llm_chunk_overlap_chars": 256
   },
   "app": {
     "session_ttl_minutes": 30,
@@ -29,20 +34,76 @@
   },
   "ui": {
     "pii_categories": {
-      "private_person": { "color": "pii-person", "icon": "User", "label": "Name" },
-      "private_email": { "color": "pii-contact", "icon": "Mail", "label": "Email" },
-      "private_phone": { "color": "pii-contact", "icon": "Phone", "label": "Phone" },
-      "private_address": { "color": "pii-location", "icon": "MapPin", "label": "Address" },
-      "private_date": { "color": "pii-date", "icon": "Calendar", "label": "Date" },
-      "private_url": { "color": "pii-contact", "icon": "Link", "label": "URL" },
-      "health_condition": { "color": "pii-health", "icon": "Heart", "label": "Health" },
-      "health_treatment": { "color": "pii-health", "icon": "Pill", "label": "Treatment" },
-      "health_lab_result": { "color": "pii-lab", "icon": "FlaskConical", "label": "Lab" },
-      "personal_measurement": { "color": "pii-measurement", "icon": "Ruler", "label": "Measurement" },
-      "personal_demographic": { "color": "pii-measurement", "icon": "Users", "label": "Demographic" },
-      "lifestyle_info": { "color": "pii-measurement", "icon": "Activity", "label": "Lifestyle" },
-      "account_number": { "color": "pii-secret", "icon": "CreditCard", "label": "Account/ID" },
-      "secret": { "color": "pii-secret", "icon": "Key", "label": "Secret" }
+      "private_person": {
+        "color": "pii-person",
+        "icon": "User",
+        "label": "Name"
+      },
+      "private_email": {
+        "color": "pii-contact",
+        "icon": "Mail",
+        "label": "Email"
+      },
+      "private_phone": {
+        "color": "pii-contact",
+        "icon": "Phone",
+        "label": "Phone"
+      },
+      "private_address": {
+        "color": "pii-location",
+        "icon": "MapPin",
+        "label": "Address"
+      },
+      "private_date": {
+        "color": "pii-date",
+        "icon": "Calendar",
+        "label": "Date"
+      },
+      "private_url": {
+        "color": "pii-contact",
+        "icon": "Link",
+        "label": "URL"
+      },
+      "health_condition": {
+        "color": "pii-health",
+        "icon": "Heart",
+        "label": "Health"
+      },
+      "health_treatment": {
+        "color": "pii-health",
+        "icon": "Pill",
+        "label": "Treatment"
+      },
+      "health_lab_result": {
+        "color": "pii-lab",
+        "icon": "FlaskConical",
+        "label": "Lab"
+      },
+      "personal_measurement": {
+        "color": "pii-measurement",
+        "icon": "Ruler",
+        "label": "Measurement"
+      },
+      "personal_demographic": {
+        "color": "pii-measurement",
+        "icon": "Users",
+        "label": "Demographic"
+      },
+      "lifestyle_info": {
+        "color": "pii-measurement",
+        "icon": "Activity",
+        "label": "Lifestyle"
+      },
+      "account_number": {
+        "color": "pii-secret",
+        "icon": "CreditCard",
+        "label": "Account/ID"
+      },
+      "secret": {
+        "color": "pii-secret",
+        "icon": "Key",
+        "label": "Secret"
+      }
     }
   }
 }
