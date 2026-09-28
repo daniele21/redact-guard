@@ -2,6 +2,7 @@ import sys
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+import json
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(BACKEND_DIR) not in sys.path:
@@ -13,7 +14,9 @@ from domain.detection import (
     DetectionFailureCode,
     LLMInferenceResult,
 )
+from config import config
 from domain.models import PageMarkdown
+from services.korgis_client import call_korgis
 from services.output_contract import parse_model_response
 from services.pii_detector import detect_pii_for_page
 from services.text_segments import segment_text
@@ -42,6 +45,49 @@ class OutputContractTests(unittest.TestCase):
                 allowed_types={"private_person"},
             )
         self.assertEqual(ctx.exception.code, DetectionFailureCode.INVALID_SCHEMA)
+
+
+
+
+class _HTTPResponse:
+    def __init__(self, payload):
+        self.payload = payload
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return None
+
+    def read(self):
+        return json.dumps(self.payload).encode("utf-8")
+
+
+class KorgisBoundaryTests(unittest.TestCase):
+    def test_finish_reason_length_is_typed_truncation(self):
+        response = _HTTPResponse(
+            {
+                "choices": [
+                    {
+                        "message": {"content": '{"pii_fields":['},
+                        "finish_reason": "length",
+                    }
+                ],
+                "usage": {"prompt_tokens": 10, "completion_tokens": 20},
+            }
+        )
+
+        with patch(
+            "services.korgis_client.urllib.request.urlopen",
+            return_value=response,
+        ):
+            with self.assertRaises(DetectionContractError) as ctx:
+                call_korgis("system", "text")
+
+        self.assertEqual(
+            ctx.exception.code,
+            DetectionFailureCode.TRUNCATED_OUTPUT,
+        )
 
 
 class SegmentationTests(unittest.TestCase):
@@ -93,6 +139,41 @@ class DetectionPipelineTests(unittest.TestCase):
             DETECTION_CONTRACT_VERSION,
         )
         cache_set.assert_called_once()
+
+    def test_overlap_deduplicates_same_source_finding(self):
+        page = PageMarkdown(
+            page_number=1,
+            text=("A" * 10) + "Mario Rossi\n" + ("B" * 40),
+        )
+
+        def inference(_prompt, user_text):
+            fields = []
+            if "Mario Rossi" in user_text:
+                fields.append(
+                    {"pii_type": "private_person", "value": "Mario Rossi"}
+                )
+            return LLMInferenceResult(
+                model="test-model",
+                content=json.dumps({"pii_fields": fields}),
+                latency_ms=1.0,
+                finish_reason="stop",
+            )
+
+        with (
+            patch("services.pii_detector.call_local_llm", side_effect=inference),
+            patch("services.pii_detector.cache_manager.get_llm", return_value=None),
+            patch("services.pii_detector.cache_manager.set_llm"),
+            patch.object(config, "llm_chunk_max_chars", 30),
+            patch.object(config, "llm_chunk_overlap_chars", 20),
+        ):
+            result = detect_pii_for_page(page, "financial", force=True)
+
+        matches = [
+            field for field in result.pii_fields
+            if field.value == "Mario Rossi"
+        ]
+        self.assertEqual(len(matches), 1)
+        self.assertGreater(result.diagnostics.chunks, 1)
 
     def test_invalid_model_output_is_never_cached_as_success(self):
         response = LLMInferenceResult(
