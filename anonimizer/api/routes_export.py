@@ -1,3 +1,5 @@
+import re
+
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import HTMLResponse, PlainTextResponse
 
@@ -8,6 +10,13 @@ from services.redaction_engine import apply_redaction_to_document
 from services.session_store import get_session
 
 router = APIRouter()
+
+
+def _safe_export_stem(filename: str) -> str:
+    stem = filename.rsplit(".", 1)[0]
+    sanitized = re.sub(r"[^A-Za-z0-9._-]+", "_", stem).strip("._")
+    return sanitized or "document"
+
 
 
 @router.get("/export/{doc_id}")
@@ -35,7 +44,7 @@ def export_document(doc_id: str, format: str = "md"):
         output_lines.append("\n\n---\n\n")
 
     markdown_content = "".join(output_lines)
-    safe_name = session.original_filename.rsplit(".", 1)[0]
+    safe_name = _safe_export_stem(session.original_filename)
     export_filename = f"{safe_name}_protected.md"
 
     return PlainTextResponse(
@@ -58,7 +67,7 @@ def export_client_report(doc_id: str, download: bool = False):
 
     summary = build_document_summary(session)
     report = render_client_report(summary)
-    safe_name = session.original_filename.rsplit(".", 1)[0]
+    safe_name = _safe_export_stem(session.original_filename)
     headers = {}
     if download:
         headers["Content-Disposition"] = (
