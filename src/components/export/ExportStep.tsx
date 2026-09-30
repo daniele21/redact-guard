@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Download, CheckCircle2, RotateCcw, Copy, Check, FileText } from 'lucide-react';
+import { Download, CheckCircle2, RotateCcw, Copy, Check, FileText, ShieldCheck, Eye, ShieldOff } from 'lucide-react';
 import { DocumentState } from '../../hooks/useDocument';
 import { api } from '../../services/api';
 
@@ -51,6 +51,54 @@ export function ExportStep({ state, onReset }: ExportStepProps) {
           </p>
         </div>
 
+        {state.summary && (
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="bg-primary/5 border border-primary/15 rounded-2xl p-4">
+              <div className="flex items-center gap-2 text-primary text-xs font-bold uppercase tracking-wider">
+                <ShieldCheck className="w-4 h-4" />
+                Redacted
+              </div>
+              <div className="text-2xl font-bold text-on-surface mt-2">
+                {state.summary.decision_counts.redact}
+              </div>
+              <p className="text-xs text-on-surface-variant mt-1">Protected occurrences</p>
+            </div>
+            <div className="bg-surface-container-low border border-outline-variant rounded-2xl p-4">
+              <div className="flex items-center gap-2 text-on-surface-variant text-xs font-bold uppercase tracking-wider">
+                <Eye className="w-4 h-4" />
+                Retained
+              </div>
+              <div className="text-2xl font-bold text-on-surface mt-2">
+                {state.summary.decision_counts.keep}
+              </div>
+              <p className="text-xs text-on-surface-variant mt-1">Explicitly kept</p>
+            </div>
+            <div className="bg-surface-container-low border border-outline-variant rounded-2xl p-4">
+              <div className="flex items-center gap-2 text-on-surface-variant text-xs font-bold uppercase tracking-wider">
+                <ShieldOff className="w-4 h-4" />
+                Not PII
+              </div>
+              <div className="text-2xl font-bold text-on-surface mt-2">
+                {state.summary.decision_counts.not_pii}
+              </div>
+              <p className="text-xs text-on-surface-variant mt-1">Dismissed findings</p>
+            </div>
+            <div className="bg-success/5 border border-success/15 rounded-2xl p-4">
+              <div className="text-success text-xs font-bold uppercase tracking-wider">
+                Coverage
+              </div>
+              <div className="text-2xl font-bold text-on-surface mt-2">
+                {state.summary.pages_analyzed}/{state.summary.pages_total}
+              </div>
+              <p className="text-xs text-on-surface-variant mt-1">
+                {state.summary.unresolved_findings === 0
+                  ? 'No unresolved findings'
+                  : `${state.summary.unresolved_findings} unresolved`}
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Preview Section */}
         <div className="flex flex-col border border-outline-variant rounded-2xl bg-surface-container-low overflow-hidden shadow-inner">
           <div className="px-5 py-3 border-b border-outline-variant bg-surface-container-high flex justify-between items-center">
@@ -89,7 +137,7 @@ export function ExportStep({ state, onReset }: ExportStepProps) {
             className="flex items-center gap-3 px-8 py-4 bg-primary text-on-primary rounded-full font-bold hover:bg-primary-container shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all w-full sm:w-auto justify-center"
           >
             <Download className="w-5 h-5" />
-            Download Markdown
+            Download Protected Markdown
           </button>
           
           <button
@@ -103,7 +151,7 @@ export function ExportStep({ state, onReset }: ExportStepProps) {
       </div>
       
       <div className="mt-8 text-center text-xs text-outline font-medium flex items-center justify-center gap-2">
-        <ShieldIcon /> Processed locally. No data ever leaves your device.
+        <ShieldIcon /> Processed locally. Review decisions and protection outcome remain on this device.
       </div>
     </div>
   );
