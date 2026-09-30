@@ -621,6 +621,28 @@ export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyR
         ) : (
           <>
             <div className="flex-[2] min-w-0 flex flex-col gap-4">
+              {state.analysisErrors[currentPage] && (
+                <div className="shrink-0 flex items-start gap-3 rounded-2xl border border-error/20 bg-error/5 px-4 py-3">
+                  <AlertCircle className="w-5 h-5 text-error mt-0.5" />
+                  <div>
+                    <p className="text-sm font-bold text-error">Page analysis failed</p>
+                    <p className="text-xs text-on-surface-variant mt-0.5">
+                      {state.analysisErrors[currentPage]}
+                    </p>
+                  </div>
+                </div>
+              )}
+              {!state.analysisErrors[currentPage] && currentResult?.warning && (
+                <div className="shrink-0 flex items-start gap-3 rounded-2xl border border-warning/20 bg-warning/5 px-4 py-3">
+                  <AlertCircle className="w-5 h-5 text-warning mt-0.5" />
+                  <div>
+                    <p className="text-sm font-bold text-warning">Review required</p>
+                    <p className="text-xs text-on-surface-variant mt-0.5">
+                      {currentResult.warning}
+                    </p>
+                  </div>
+                </div>
+              )}
               {isSelectionMode && (
                 <div className="bg-surface-container p-4 rounded-2xl border border-primary/20 flex flex-wrap gap-2 max-h-32 overflow-y-auto">
                   {state.pages.map(p => (
