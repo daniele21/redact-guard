@@ -94,6 +94,25 @@ export function ReviewOverview({
           };
 
   const StatusIcon = status.icon;
+  const statusClasses = {
+    error: {
+      card: 'bg-error/5 border-error/20',
+      text: 'text-error',
+    },
+    warning: {
+      card: 'bg-warning/5 border-warning/20',
+      text: 'text-warning',
+    },
+    success: {
+      card: 'bg-success/5 border-success/20',
+      text: 'text-success',
+    },
+    primary: {
+      card: 'bg-primary/5 border-primary/20',
+      text: 'text-primary',
+    },
+  }[status.tone];
+
   const maxCategory = Math.max(
     1,
     ...(state.summary?.categories ?? []).map(item => item.occurrence_count),
@@ -130,8 +149,8 @@ export function ReviewOverview({
               </div>
             </div>
 
-            <div className={`min-w-[250px] rounded-2xl border p-4 bg-${status.tone}/5 border-${status.tone}/20`}>
-              <div className={`flex items-center gap-2 text-${status.tone}`}>
+            <div className={`min-w-[250px] rounded-2xl border p-4 ${statusClasses.card}`}>
+              <div className={`flex items-center gap-2 ${statusClasses.text}`}>
                 <StatusIcon className="w-5 h-5" />
                 <strong>{status.title}</strong>
               </div>
@@ -216,7 +235,7 @@ export function ReviewOverview({
             <div className="space-y-3">
               <DecisionRow label="Suggested for redaction" value={localDecisionCounts.redact} tone="primary" />
               <DecisionRow label="Explicitly retained" value={localDecisionCounts.keep} tone="warning" />
-              <DecisionRow label="Dismissed as not PII" value={localDecisionCounts.not_pii} tone="outline" />
+              <DecisionRow label="Dismissed as not PII" value={localDecisionCounts.not_pii} tone="neutral" />
               <div className="border-t border-outline-variant pt-3 mt-4 grid grid-cols-2 gap-3">
                 <div className="rounded-xl bg-surface-container p-3">
                   <span className="text-[10px] uppercase tracking-wider text-outline font-bold">
@@ -289,12 +308,19 @@ function DecisionRow({
 }: {
   label: string;
   value: number;
-  tone: string;
+  tone: 'primary' | 'warning' | 'neutral';
 }) {
+  const dotClass =
+    tone === 'primary'
+      ? 'bg-primary'
+      : tone === 'warning'
+        ? 'bg-warning'
+        : 'bg-outline';
+
   return (
     <div className="flex items-center justify-between rounded-xl bg-surface-container p-3">
       <div className="flex items-center gap-2">
-        <span className={`w-2.5 h-2.5 rounded-full bg-${tone}`} />
+        <span className={`w-2.5 h-2.5 rounded-full ${dotClass}`} />
         <span className="text-sm text-on-surface-variant">{label}</span>
       </div>
       <strong className="text-on-surface">{value}</strong>
