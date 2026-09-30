@@ -7,11 +7,10 @@ import {
   ProfileSummary,
   ProfileDetail,
   PIITypeDefinition,
-  HealthResponse
+  HealthResponse,
+  DocumentAnalysisSummary,
 } from '../types';
 
-// In dev mode (Vite proxy), use relative path.
-// In production (Tauri), resolve the actual backend port.
 let API_BASE = '/api';
 let _resolvePromise: Promise<string> | null = null;
 
@@ -23,7 +22,7 @@ function resolveApiBase(): Promise<string> {
         const port = await invoke<number>('get_api_port');
         API_BASE = `http://127.0.0.1:${port}/api`;
       } catch {
-        // Not running in Tauri (dev mode with Vite proxy) — keep relative path
+        // Dev mode with Vite proxy.
       }
       return API_BASE;
     })();
@@ -36,8 +35,18 @@ async function getBase(): Promise<string> {
   return API_BASE;
 }
 
+async function errorMessage(res: Response, fallback: string): Promise<string> {
+  const body = await res.json().catch(() => null);
+  const detail = body?.detail;
+  if (typeof detail === 'string') return detail;
+  if (detail && typeof detail === 'object') {
+    const code = detail.code ? `${detail.code}: ` : '';
+    return `${code}${detail.message ?? fallback}`;
+  }
+  return fallback;
+}
+
 export const api = {
-  /** Must be called once before any other API call in Tauri production mode */
   init: resolveApiBase,
 
   health: async (): Promise<HealthResponse> => {
@@ -57,41 +66,62 @@ export const api = {
       method: 'POST',
       body: formData,
     });
-    
+
     if (!res.ok) {
-      const error = await res.json().catch(() => ({ detail: 'Upload failed' }));
-      throw new Error(error.detail || 'Upload failed');
+      throw new Error(await errorMessage(res, 'Upload failed'));
     }
     return res.json();
   },
 
-  analyzePage: async (docId: string, pageNum: number, force: boolean = false): Promise<PageAnalysisResult> => {
+  analyzePage: async (
+    docId: string,
+    pageNum: number,
+    force: boolean = false,
+  ): Promise<PageAnalysisResult> => {
     const base = await getBase();
     const url = `${base}/analyze/${docId}/page/${pageNum}${force ? '?force=true' : ''}`;
-    const res = await fetch(url, {
-      method: 'POST'
-    });
-    if (!res.ok) throw new Error(`Failed to analyze page ${pageNum}`);
+    const res = await fetch(url, { method: 'POST' });
+    if (!res.ok) {
+      throw new Error(
+        await errorMessage(res, `Failed to analyze page ${pageNum}`),
+      );
+    }
     return res.json();
   },
 
   analyzeBatch: async (docId: string): Promise<BatchAnalysisResponse> => {
     const base = await getBase();
-    const res = await fetch(`${base}/analyze/${docId}`, {
-      method: 'POST'
-    });
-    if (!res.ok) throw new Error('Failed to analyze document');
+    const res = await fetch(`${base}/analyze/${docId}`, { method: 'POST' });
+    if (!res.ok) {
+      throw new Error(await errorMessage(res, 'Failed to analyze document'));
+    }
     return res.json();
   },
 
-  redact: async (docId: string, fieldsToRedact: RedactRequestItem[]): Promise<RedactResponse> => {
+  getAnalysisSummary: async (docId: string): Promise<DocumentAnalysisSummary> => {
+    const base = await getBase();
+    const res = await fetch(`${base}/analyze/${docId}/summary`, {
+      cache: 'no-store',
+    });
+    if (!res.ok) {
+      throw new Error(await errorMessage(res, 'Failed to load analysis summary'));
+    }
+    return res.json();
+  },
+
+  redact: async (
+    docId: string,
+    fieldsToRedact: RedactRequestItem[],
+  ): Promise<RedactResponse> => {
     const base = await getBase();
     const res = await fetch(`${base}/redact/${docId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fields_to_redact: fieldsToRedact })
+      body: JSON.stringify({ fields_to_redact: fieldsToRedact }),
     });
-    if (!res.ok) throw new Error('Failed to apply redactions');
+    if (!res.ok) {
+      throw new Error(await errorMessage(res, 'Failed to apply review decisions'));
+    }
     return res.json();
   },
 
@@ -121,38 +151,44 @@ export const api = {
     const res = await fetch(`${base}/profiles/custom-types`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, description })
+      body: JSON.stringify({ name, description }),
     });
     if (!res.ok) {
-      const error = await res.json().catch(() => ({ detail: 'Failed to add custom type' }));
-      throw new Error(error.detail || 'Failed to add custom type');
+      throw new Error(await errorMessage(res, 'Failed to add custom type'));
     }
     return res.json();
   },
 
-  updateCustomType: async (currentName: string, name: string, description: string): Promise<PIITypeDefinition> => {
+  updateCustomType: async (
+    currentName: string,
+    name: string,
+    description: string,
+  ): Promise<PIITypeDefinition> => {
     const base = await getBase();
-    const res = await fetch(`${base}/profiles/custom-types/${encodeURIComponent(currentName)}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, description })
-    });
+    const res = await fetch(
+      `${base}/profiles/custom-types/${encodeURIComponent(currentName)}`,
+      {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, description }),
+      },
+    );
     if (!res.ok) {
-      const error = await res.json().catch(() => ({ detail: 'Failed to update custom type' }));
-      throw new Error(error.detail || 'Failed to update custom type');
+      throw new Error(await errorMessage(res, 'Failed to update custom type'));
     }
     return res.json();
   },
 
   removeCustomType: async (name: string): Promise<void> => {
     const base = await getBase();
-    const res = await fetch(`${base}/profiles/custom-types/${encodeURIComponent(name)}`, {
-      method: 'DELETE'
-    });
+    const res = await fetch(
+      `${base}/profiles/custom-types/${encodeURIComponent(name)}`,
+      { method: 'DELETE' },
+    );
     if (!res.ok) throw new Error('Failed to remove custom type');
   },
-  
+
   exportDocumentUrl: (docId: string): string => {
     return `${API_BASE}/export/${docId}?format=md`;
-  }
+  },
 };
