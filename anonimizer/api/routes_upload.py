@@ -49,6 +49,10 @@ async def upload_document(
         preprocessed_pages=preprocessed_pages,
         pii_results={},
         redaction_overrides={},
+        review_decisions={},
+        page_analysis_status={p.page_number: "not_started" for p in pages},
+        page_analysis_errors={},
+        page_diagnostics={},
         created_at=datetime.now(timezone.utc),
         last_accessed_at=datetime.now(timezone.utc)
     )
