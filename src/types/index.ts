@@ -1,4 +1,23 @@
+export type ReviewDecision = 'redact' | 'keep' | 'not_pii';
+
+export interface DetectionDiagnostics {
+  contract_version: string;
+  status: string;
+  model: string;
+  chunks: number;
+  cache_hits: number;
+  latency_ms: number;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  finish_reasons: string[];
+  parsed_items: number;
+  resolved_items: number;
+  unresolved_items: number;
+}
+
 export interface PIIField {
+  finding_id: string;
+  entity_id: string;
   field_name: string;
   field_description: string;
   pii_type: string;
@@ -15,6 +34,7 @@ export interface PageAnalysisResult {
   redacted_text: string;
   warning?: string;
   cache_hit: boolean;
+  diagnostics?: DetectionDiagnostics | null;
 }
 
 export interface BatchAnalysisResponse {
@@ -34,9 +54,63 @@ export interface UploadResponse {
   pages: UploadResponsePage[];
 }
 
+export interface SensitiveEntityOccurrence {
+  finding_id: string;
+  page_number: number;
+  start: number | null;
+  end: number | null;
+}
+
+export interface SensitiveEntitySummary {
+  entity_id: string;
+  pii_type: string;
+  label: string;
+  masked_value: string;
+  occurrence_count: number;
+  pages: number[];
+  decision_counts: Record<ReviewDecision, number>;
+  occurrences: SensitiveEntityOccurrence[];
+}
+
+export interface CategoryAnalysisSummary {
+  pii_type: string;
+  label: string;
+  occurrence_count: number;
+}
+
+export type DocumentAnalysisStatus =
+  | 'not_started'
+  | 'analyzing'
+  | 'partial'
+  | 'complete'
+  | 'needs_attention'
+  | 'failed';
+
+export interface DocumentAnalysisSummary {
+  document_id: string;
+  filename: string;
+  profile: string;
+  contract_version: string;
+  analysis_status: DocumentAnalysisStatus;
+  pages_total: number;
+  pages_analyzed: number;
+  pages_failed: number;
+  pages_with_warnings: number;
+  affected_pages: number;
+  unique_sensitive_items: number;
+  occurrences: number;
+  categories: CategoryAnalysisSummary[];
+  decision_counts: Record<ReviewDecision, number>;
+  unresolved_findings: number;
+  page_status: Record<string, string>;
+  page_errors: Record<string, string>;
+  entities: SensitiveEntitySummary[];
+  local_processing: boolean;
+}
+
 export interface RedactRequestItem {
   field_id: string;
-  redact: boolean;
+  decision: ReviewDecision;
 }
 
 export interface RedactedPage {
@@ -46,7 +120,14 @@ export interface RedactedPage {
 
 export interface RedactResponse {
   redacted_pages: RedactedPage[];
-  stats: Record<string, number>;
+  stats: {
+    total_findings: number;
+    total_fields_redacted: number;
+    total_fields_kept: number;
+    total_fields_not_pii: number;
+    reviewed_findings: number;
+    [key: string]: number;
+  };
 }
 
 export interface PIITypeDefinition {
