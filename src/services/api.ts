@@ -191,4 +191,8 @@ export const api = {
   exportDocumentUrl: (docId: string): string => {
     return `${API_BASE}/export/${docId}?format=md`;
   },
+
+  clientReportUrl: (docId: string, download: boolean = false): string => {
+    return `${API_BASE}/export/${docId}/report${download ? '?download=true' : ''}`;
+  },
 };
