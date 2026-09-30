@@ -15,6 +15,7 @@ from domain.models import (
     RedactRequestItem,
 )
 from services.analysis_summary import build_document_summary
+from services.client_report import render_client_report
 from services.finding_identity import build_entity_id, build_finding_id
 from services.redaction_engine import apply_redaction_to_document
 
@@ -139,3 +140,30 @@ class ReviewDecisionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ClientReportTests(unittest.TestCase):
+    def test_client_report_excludes_raw_sensitive_values(self):
+        session, _, _ = _session()
+        summary = build_document_summary(session)
+
+        report = render_client_report(summary)
+
+        self.assertIn("Protection report", report)
+        self.assertIn("contract.pdf", report)
+        self.assertIn("Private person", report)
+        self.assertNotIn("Mario Rossi", report)
+        self.assertIn("Raw sensitive values are intentionally excluded", report)
+
+    def test_client_report_surfaces_material_exceptions(self):
+        session, _, field2 = _session()
+        session.review_decisions[field2.finding_id] = "keep"
+        session.page_analysis_status[2] = "failed"
+        session.page_analysis_errors[2] = "invalid_json"
+        summary = build_document_summary(session)
+
+        report = render_client_report(summary)
+
+        self.assertIn("Analysis incomplete", report)
+        self.assertIn("page(s) failed analysis", report)
+        self.assertIn("explicitly retained", report)
