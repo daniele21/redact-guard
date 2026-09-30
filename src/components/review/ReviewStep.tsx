@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   ChevronLeft, 
   ChevronRight, 
@@ -17,8 +17,12 @@ import {
   Sparkles 
 } from 'lucide-react';
 import { DocumentState } from '../../hooks/useDocument';
+import { ReviewDecision } from '../../types';
 import { DocumentPanel } from './DocumentPanel';
+import { FindingsView } from './FindingsView';
 import { PIISidebar } from './PIISidebar';
+import { ReviewOverview } from './ReviewOverview';
+import { fieldId } from './reviewIdentity';
 
 // Fixed skeleton line widths for grid card miniatures (avoids randomness in render)
 const SKELETON_WIDTHS = [82, 95, 71, 88, 64, 90, 76, 93, 68, 85, 73, 79, 91, 67, 86, 80, 72, 94, 62, 87, 77, 89, 66, 83, 70, 92, 75, 96, 63, 84, 78, 91];
@@ -27,14 +31,14 @@ interface ReviewStepProps {
   state: DocumentState;
   onAnalyzePage: (pageNumber: number, force?: boolean) => Promise<void>;
   onBatchAnalyzePages: (pageNumbers: number[], force?: boolean) => Promise<void>;
-  onApplyRedactions: (overrides: Record<string, boolean>) => Promise<void>;
+  onApplyRedactions: (decisions: Record<string, ReviewDecision>) => Promise<void>;
   onProceed: () => void;
 }
 
 export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyRedactions, onProceed }: ReviewStepProps) {
   const [currentPage, setCurrentPage] = useState(1);
-  const [overrides, setOverrides] = useState<Record<string, boolean>>({});
-  const [excludedFields, setExcludedFields] = useState<Set<string>>(new Set());
+  const [decisions, setDecisions] = useState<Record<string, ReviewDecision>>({});
+  const [workspaceView, setWorkspaceView] = useState<'overview' | 'findings' | 'document'>('overview');
   const [isExporting, setIsExporting] = useState(false);
   const [selectedPages, setSelectedPages] = useState<Set<number>>(new Set());
   const [isSelectionMode, setIsSelectionMode] = useState(false);
@@ -48,24 +52,45 @@ export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyR
   const currentPageData = state.pages.find(p => p.page_number === currentPage);
   const isAnalyzing = state.isAnalyzing;
 
-  // Initialize overrides for newly analyzed pages
+  // Every new finding starts with the policy-safe default: redact.
   useEffect(() => {
     Object.entries(state.analysisResults).forEach(([pageStr, result]) => {
-      const pNum = parseInt(pageStr);
-      setOverrides(prev => {
-        const newOverrides = { ...prev };
+      const pageNumber = parseInt(pageStr);
+      setDecisions(prev => {
+        const next = { ...prev };
         let changed = false;
         result.pii_fields.forEach(field => {
-          const id = `${pNum}_${field.pii_type}_${field.value}`;
-          if (newOverrides[id] === undefined) {
-            newOverrides[id] = true; // default redact
+          const id = fieldId(field, pageNumber);
+          if (next[id] === undefined) {
+            next[id] = 'redact';
             changed = true;
           }
         });
-        return changed ? newOverrides : prev;
+        return changed ? next : prev;
       });
     });
   }, [state.analysisResults]);
+
+  const overrides = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(decisions).map(([id, decision]) => [
+          id,
+          decision === 'redact',
+        ]),
+      ) as Record<string, boolean>,
+    [decisions],
+  );
+
+  const excludedFields = useMemo(
+    () =>
+      new Set(
+        Object.entries(decisions)
+          .filter(([, decision]) => decision === 'not_pii')
+          .map(([id]) => id),
+      ),
+    [decisions],
+  );
 
   // Detect newly completed pages and flash a "done" overlay briefly
   useEffect(() => {
@@ -95,36 +120,39 @@ export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyR
     prevAnalysisResultsRef.current = current;
   }, [state.analysisResults]);
 
-  const toggleRedaction = (fieldId: string) => {
-    setOverrides(prev => ({
+  const toggleRedaction = (findingId: string) => {
+    setDecisions(prev => ({
       ...prev,
-      [fieldId]: !(prev[fieldId] ?? true)
+      [findingId]: prev[findingId] === 'redact' ? 'keep' : 'redact',
     }));
   };
 
-  const toggleExclusion = (fieldId: string) => {
-    setExcludedFields(prev => {
-      const next = new Set(prev);
-      if (next.has(fieldId)) {
-        next.delete(fieldId);
-      } else {
-        next.add(fieldId);
-        // Also ensure it's not redacted if excluded
-        setOverrides(ov => ({ ...ov, [fieldId]: false }));
-      }
+  const toggleExclusion = (findingId: string) => {
+    setDecisions(prev => ({
+      ...prev,
+      [findingId]: prev[findingId] === 'not_pii' ? 'redact' : 'not_pii',
+    }));
+  };
+
+  const setFindingDecision = (
+    findingIds: string[],
+    decision: ReviewDecision,
+  ) => {
+    setDecisions(prev => {
+      const next = { ...prev };
+      findingIds.forEach(id => {
+        next[id] = decision;
+      });
       return next;
     });
   };
 
   const redactAll = () => {
     if (!currentResult) return;
-    setOverrides(prev => {
+    setDecisions(prev => {
       const next = { ...prev };
-      currentResult.pii_fields.forEach(f => {
-        const id = `${currentPage}_${f.pii_type}_${f.value}`;
-        if (!excludedFields.has(id)) {
-          next[id] = true;
-        }
+      currentResult.pii_fields.forEach(field => {
+        next[fieldId(field, currentPage)] = 'redact';
       });
       return next;
     });
@@ -132,10 +160,10 @@ export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyR
 
   const keepAll = () => {
     if (!currentResult) return;
-    setOverrides(prev => {
+    setDecisions(prev => {
       const next = { ...prev };
-      currentResult.pii_fields.forEach(f => {
-        next[`${currentPage}_${f.pii_type}_${f.value}`] = false;
+      currentResult.pii_fields.forEach(field => {
+        next[fieldId(field, currentPage)] = 'keep';
       });
       return next;
     });
@@ -144,7 +172,7 @@ export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyR
   const handleExport = async () => {
     setIsExporting(true);
     try {
-      await onApplyRedactions(overrides);
+      await onApplyRedactions(decisions);
       onProceed();
     } finally {
       setIsExporting(false);
@@ -155,11 +183,19 @@ export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyR
     const element = document.getElementById(`pii-${start}`);
     if (element) {
       element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      // Add a brief highlight effect
       element.classList.add('ring-4', 'ring-primary', 'ring-offset-2', 'rounded-sm', 'transition-all');
       setTimeout(() => {
         element.classList.remove('ring-4', 'ring-primary', 'ring-offset-2');
       }, 2000);
+    }
+  };
+
+  const openOccurrence = (pageNumber: number, start: number | null) => {
+    setCurrentPage(pageNumber);
+    setViewMode('document');
+    setWorkspaceView('document');
+    if (start !== null) {
+      window.setTimeout(() => handleJumpToOccurrence(start), 50);
     }
   };
 
@@ -196,6 +232,53 @@ export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyR
 
   return (
     <div className="flex flex-col h-[calc(100vh-12rem)]">
+      <div className="shrink-0 bg-surface border-b border-outline-variant px-4 md:px-6 py-3 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-1 bg-surface-container rounded-xl p-1">
+          {([
+            ['overview', 'Overview'],
+            ['findings', 'Findings'],
+            ['document', 'Document'],
+          ] as const).map(([id, label]) => (
+            <button
+              key={id}
+              onClick={() => setWorkspaceView(id)}
+              className={
+                workspaceView === id
+                  ? 'px-4 py-2 rounded-lg bg-surface text-primary shadow-sm text-sm font-bold'
+                  : 'px-4 py-2 rounded-lg text-on-surface-variant text-sm font-semibold hover:text-on-surface'
+              }
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="hidden md:flex items-center gap-3 text-xs text-on-surface-variant">
+          <span>{state.summary?.pages_analyzed ?? state.analyzedCount}/{totalPages} pages analyzed</span>
+          {Object.keys(state.analysisErrors).length > 0 && (
+            <span className="px-2.5 py-1 rounded-full bg-error/10 text-error font-bold">
+              {Object.keys(state.analysisErrors).length} failed
+            </span>
+          )}
+        </div>
+      </div>
+
+      {workspaceView === 'overview' ? (
+        <ReviewOverview
+          state={state}
+          decisions={decisions}
+          onAnalyzeAll={analyzeAll}
+          onOpenFindings={() => setWorkspaceView('findings')}
+          onOpenDocument={() => setWorkspaceView('document')}
+        />
+      ) : workspaceView === 'findings' ? (
+        <FindingsView
+          state={state}
+          decisions={decisions}
+          onSetDecision={setFindingDecision}
+          onOpenOccurrence={openOccurrence}
+        />
+      ) : (
+        <>
       {/* Toolbar */}
       <div className="flex items-center justify-between bg-surface p-4 border-b border-outline-variant shrink-0">
         <div className="flex items-center gap-4">
@@ -629,6 +712,8 @@ export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyR
           </>
         )}
       </div>
+        </>
+      )}
     </div>
   );
 }
