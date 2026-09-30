@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-09-30 — Protection review UX baseline
+
+- Added opaque occurrence (`occ_...`) and entity (`ent_...`) identifiers so review state no longer embeds raw PII in UI IDs.
+- Added explicit review decisions: `redact`, `keep`, and `not_pii`.
+- Added page-level analysis status/error tracking and a document-level protection summary API.
+- Added unique sensitive item, occurrence, affected-page, category, unresolved, and decision-count metrics.
+- Added the three-layer Review workspace: **Overview → Findings → Document**.
+- Added entity-first findings review with masked values and cross-page occurrence navigation.
+- Added explicit page warning/failure banners so failed analysis cannot look like zero detected PII.
+- Added accurate export protection counts and coverage summary.
+- Removed the obsolete mock viewer that displayed an uncalibrated confidence percentage.
+- Added tests for opaque IDs, review decisions, summary semantics, and failed-page document status.
+- Documented the boundary between the internal reviewer workspace and the future client-facing view.
+
 ## 2026-09-21 — Korgis runtime boundary
 
 - Migrated active PII inference from RedactGuard's embedded `llama_cpp_server.py` to external Korgis.
