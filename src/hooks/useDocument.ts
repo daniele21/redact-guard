@@ -1,6 +1,12 @@
 import { useState, useCallback } from 'react';
 import { api } from '../services/api';
-import { UploadResponse, PageAnalysisResult, RedactRequestItem, RedactedPage } from '../types';
+import {
+  DocumentAnalysisSummary,
+  PageAnalysisResult,
+  RedactRequestItem,
+  RedactedPage,
+  UploadResponse,
+} from '../types';
 
 export type AppStep = 'upload' | 'review' | 'export';
 
@@ -9,6 +15,8 @@ export interface DocumentState {
   profile: string;
   pages: UploadResponse['pages'];
   analysisResults: Record<number, PageAnalysisResult>;
+  analysisErrors: Record<number, string>;
+  summary: DocumentAnalysisSummary | null;
   redactedPages: RedactedPage[];
   isUploading: boolean;
   isAnalyzing: boolean;
@@ -17,46 +25,55 @@ export interface DocumentState {
   analyzedCount: number;
 }
 
+const initialState = (): DocumentState => ({
+  docId: null,
+  profile: 'healthcare',
+  pages: [],
+  analysisResults: {},
+  analysisErrors: {},
+  summary: null,
+  redactedPages: [],
+  isUploading: false,
+  isAnalyzing: false,
+  currentAnalyzingPage: null,
+  pendingPages: [],
+  analyzedCount: 0,
+});
+
 export function useDocument() {
   const [step, setStep] = useState<AppStep>('upload');
-  const [state, setState] = useState<DocumentState>({
-    docId: null,
-    profile: 'healthcare',
-    pages: [],
-    analysisResults: {},
-    redactedPages: [],
-    isUploading: false,
-    isAnalyzing: false,
-    currentAnalyzingPage: null,
-    pendingPages: [],
-    analyzedCount: 0,
-  });
+  const [state, setState] = useState<DocumentState>(initialState);
+
+  const refreshSummary = async (docId: string) => {
+    const summary = await api.getAnalysisSummary(docId);
+    setState(prev => ({ ...prev, summary }));
+    return summary;
+  };
 
   const upload = async (file: File, profile: string) => {
     try {
-      // 0. Start uploading
-      setState(prev => ({ 
-        ...prev, 
+      setState({
+        ...initialState(),
         isUploading: true,
-        docId: null,
-        pages: [],
-        analysisResults: {},
-        redactedPages: [],
-        currentAnalyzingPage: null,
-        analyzedCount: 0
-      }));
+        profile,
+      });
 
-      // 1. Upload the file
       const uploadRes = await api.upload(file, profile);
-      
+      let summary: DocumentAnalysisSummary | null = null;
+      try {
+        summary = await api.getAnalysisSummary(uploadRes.doc_id);
+      } catch (summaryError) {
+        console.warn('Initial analysis summary unavailable:', summaryError);
+      }
+
       setState(prev => ({
         ...prev,
         docId: uploadRes.doc_id,
         profile: uploadRes.profile,
         pages: uploadRes.pages,
+        summary,
         isUploading: false,
       }));
-      
       setStep('review');
     } catch (err) {
       console.error('Upload failed:', err);
@@ -66,16 +83,22 @@ export function useDocument() {
   };
 
   const analyzePage = async (pageNumber: number, force: boolean = false) => {
-    if (!state.docId) return;
+    const docId = state.docId;
+    if (!docId) return;
 
-    setState(prev => ({ 
-      ...prev, 
-      isAnalyzing: true,
-      currentAnalyzingPage: pageNumber,
-    }));
+    setState(prev => {
+      const nextErrors = { ...prev.analysisErrors };
+      delete nextErrors[pageNumber];
+      return {
+        ...prev,
+        isAnalyzing: true,
+        currentAnalyzingPage: pageNumber,
+        analysisErrors: nextErrors,
+      };
+    });
 
     try {
-      const result = await api.analyzePage(state.docId, pageNumber, force);
+      const result = await api.analyzePage(docId, pageNumber, force);
       setState(prev => {
         const isNew = !prev.analysisResults[pageNumber];
         return {
@@ -83,32 +106,61 @@ export function useDocument() {
           analyzedCount: isNew ? prev.analyzedCount + 1 : prev.analyzedCount,
           analysisResults: {
             ...prev.analysisResults,
-            [pageNumber]: result
-          }
+            [pageNumber]: result,
+          },
         };
       });
     } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
       console.error(`Error analyzing page ${pageNumber}:`, err);
+      setState(prev => ({
+        ...prev,
+        analysisErrors: {
+          ...prev.analysisErrors,
+          [pageNumber]: message,
+        },
+      }));
     } finally {
-      setState(prev => ({ ...prev, isAnalyzing: false, currentAnalyzingPage: null }));
+      try {
+        await refreshSummary(docId);
+      } catch (summaryError) {
+        console.warn('Could not refresh analysis summary:', summaryError);
+      }
+      setState(prev => ({
+        ...prev,
+        isAnalyzing: false,
+        currentAnalyzingPage: null,
+      }));
     }
   };
 
-  const batchAnalyzePages = async (pageNumbers: number[], force: boolean = false) => {
-    if (!state.docId) return;
-    
-    // Mark all pages as pending at the start
-    setState(prev => ({ ...prev, isAnalyzing: true, pendingPages: [...pageNumbers] }));
-    
+  const batchAnalyzePages = async (
+    pageNumbers: number[],
+    force: boolean = false,
+  ) => {
+    const docId = state.docId;
+    if (!docId) return;
+
+    setState(prev => ({
+      ...prev,
+      isAnalyzing: true,
+      pendingPages: [...pageNumbers],
+    }));
+
     for (const pageNum of pageNumbers) {
-      // Move page from pending queue to actively scanning
-      setState(prev => ({
-        ...prev,
-        currentAnalyzingPage: pageNum,
-        pendingPages: prev.pendingPages.filter(p => p !== pageNum),
-      }));
+      setState(prev => {
+        const nextErrors = { ...prev.analysisErrors };
+        delete nextErrors[pageNum];
+        return {
+          ...prev,
+          currentAnalyzingPage: pageNum,
+          pendingPages: prev.pendingPages.filter(p => p !== pageNum),
+          analysisErrors: nextErrors,
+        };
+      });
+
       try {
-        const result = await api.analyzePage(state.docId, pageNum, force);
+        const result = await api.analyzePage(docId, pageNum, force);
         setState(prev => {
           const isNew = !prev.analysisResults[pageNum];
           return {
@@ -116,26 +168,51 @@ export function useDocument() {
             analyzedCount: isNew ? prev.analyzedCount + 1 : prev.analyzedCount,
             analysisResults: {
               ...prev.analysisResults,
-              [pageNum]: result
-            }
+              [pageNum]: result,
+            },
           };
         });
       } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
         console.error(`Error in batch analysis for page ${pageNum}:`, err);
+        setState(prev => ({
+          ...prev,
+          analysisErrors: {
+            ...prev.analysisErrors,
+            [pageNum]: message,
+          },
+        }));
+      }
+
+      try {
+        await refreshSummary(docId);
+      } catch (summaryError) {
+        console.warn('Could not refresh analysis summary:', summaryError);
       }
     }
-    
-    setState(prev => ({ ...prev, isAnalyzing: false, currentAnalyzingPage: null, pendingPages: [] }));
+
+    setState(prev => ({
+      ...prev,
+      isAnalyzing: false,
+      currentAnalyzingPage: null,
+      pendingPages: [],
+    }));
   };
 
   const applyRedactions = async (fieldsToRedact: RedactRequestItem[]) => {
-    if (!state.docId) return;
+    const docId = state.docId;
+    if (!docId) return;
     try {
-      const res = await api.redact(state.docId, fieldsToRedact);
+      const res = await api.redact(docId, fieldsToRedact);
       setState(prev => ({
         ...prev,
-        redactedPages: res.redacted_pages
+        redactedPages: res.redacted_pages,
       }));
+      try {
+        await refreshSummary(docId);
+      } catch (summaryError) {
+        console.warn('Could not refresh decision summary:', summaryError);
+      }
     } catch (err) {
       console.error('Redaction failed:', err);
       throw err;
@@ -144,18 +221,7 @@ export function useDocument() {
 
   const reset = useCallback(() => {
     setStep('upload');
-    setState({
-      docId: null,
-      profile: 'healthcare',
-      pages: [],
-      analysisResults: {},
-      redactedPages: [],
-      isUploading: false,
-      pendingPages: [],
-      isAnalyzing: false,
-      currentAnalyzingPage: null,
-      analyzedCount: 0,
-    });
+    setState(initialState());
   }, []);
 
   return {
@@ -166,6 +232,7 @@ export function useDocument() {
     analyzePage,
     batchAnalyzePages,
     applyRedactions,
-    reset
+    refreshSummary,
+    reset,
   };
 }
