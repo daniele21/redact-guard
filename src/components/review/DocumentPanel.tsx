@@ -1,6 +1,7 @@
 import React from 'react';
 import { PIIField } from '../../types';
 import { PIIHighlight } from './PIIHighlight';
+import { fieldId } from './reviewIdentity';
 
 interface DocumentPanelProps {
   text: string;
@@ -21,7 +22,7 @@ export function DocumentPanel({
 }: DocumentPanelProps) {
   
   // Filter out excluded fields
-  const activeFields = fields.filter(f => !excludedFields.has(`${pageNumber}_${f.pii_type}_${f.value}`));
+  const activeFields = fields.filter(f => !excludedFields.has(fieldId(f, pageNumber)));
 
   const validFields = activeFields.filter(f => f.start !== null && f.end !== null);
   validFields.sort((a, b) => (a.start as number) - (b.start as number));
@@ -48,16 +49,16 @@ export function DocumentPanel({
       }
 
       // Add the highlighted field
-      const fieldId = `${pageNumber}_${field.pii_type}_${field.value}`;
-      // Default to redacted (true) unless explicitly overridden
-      const isRedacted = redactionOverrides[fieldId] !== false;
+      const occurrenceId = fieldId(field, pageNumber);
+      // Default to redacted (true) unless explicitly overridden.
+      const isRedacted = redactionOverrides[occurrenceId] !== false;
 
       elements.push(
         <div key={`hl-${i}`} id={`pii-${field.start}`} className="inline">
           <PIIHighlight 
             field={field}
             isRedacted={isRedacted}
-            onToggle={() => onToggleRedaction(fieldId)}
+            onToggle={() => onToggleRedaction(occurrenceId)}
           />
         </div>
       );
