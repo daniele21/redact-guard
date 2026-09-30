@@ -126,7 +126,7 @@ footer{{margin-top:28px;padding-top:18px;border-top:1px solid var(--border);disp
     <div class="brand">RedactGuard</div>
     <div class="eyebrow">Protection report</div>
     <h1>{_esc(summary.filename)}</h1>
-    <div class="muted">{_esc(summary.profile)} policy · {_esc(summary.contract_version)}</div>
+    <div class="muted">{_esc(summary.profile)} policy</div>
   </div>
   <div class="badge">Processed locally</div>
 </header>
@@ -174,8 +174,8 @@ footer{{margin-top:28px;padding-top:18px;border-top:1px solid var(--border);disp
 </section>
 
 <footer>
-  <span>Generated {_esc(generated_at)}</span>
-  <span>Report contains masked/aggregated information only. Raw sensitive values are intentionally excluded.</span>
+  <span>Generated {_esc(generated_at)} · Detection contract {_esc(summary.contract_version)}</span>
+  <span>Report contains aggregated information only. Raw sensitive values are intentionally excluded.</span>
 </footer>
 </main>
 </body>
