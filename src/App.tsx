@@ -7,7 +7,7 @@ import { ExportStep } from './components/export/ExportStep';
 import { KorgisSetupScreen } from './components/setup/KorgisSetupScreen';
 import { useDocument } from './hooks/useDocument';
 import { api } from './services/api';
-import type { HealthResponse } from './types';
+import type { HealthResponse, ReviewDecision } from './types';
 
 type AppPhase =
   | 'starting-backend'
@@ -63,11 +63,13 @@ function App() {
     setPhase('starting-backend');
   }, []);
 
-  const handleApplyAndExport = async (overrides: Record<string, boolean>) => {
+  const handleApplyAndExport = async (
+    decisions: Record<string, ReviewDecision>,
+  ) => {
     if (!state.docId) return;
-    const fieldsToRedact = Object.entries(overrides).map(([id, redact]) => ({
+    const fieldsToRedact = Object.entries(decisions).map(([id, decision]) => ({
       field_id: id,
-      redact,
+      decision,
     }));
     await applyRedactions(fieldsToRedact);
   };
