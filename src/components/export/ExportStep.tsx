@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Download, CheckCircle2, RotateCcw, Copy, Check, FileText, ShieldCheck, Eye, ShieldOff } from 'lucide-react';
+import { Download, CheckCircle2, RotateCcw, Copy, Check, FileText, ShieldCheck, Eye, ShieldOff, Presentation } from 'lucide-react';
 import { DocumentState } from '../../hooks/useDocument';
 import { api } from '../../services/api';
+import { ClientProtectionReport } from './ClientProtectionReport';
 
 interface ExportStepProps {
   state: DocumentState;
@@ -10,6 +11,7 @@ interface ExportStepProps {
 
 export function ExportStep({ state, onReset }: ExportStepProps) {
   const [copied, setCopied] = useState(false);
+  const [showClientReport, setShowClientReport] = useState(false);
   
   const handleDownload = () => {
     if (!state.docId) return;
@@ -17,6 +19,16 @@ export function ExportStep({ state, onReset }: ExportStepProps) {
     // Create an invisible anchor to trigger download
     const a = document.createElement('a');
     a.href = url;
+    a.download = '';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
+  const handleDownloadClientReport = () => {
+    if (!state.docId) return;
+    const a = document.createElement('a');
+    a.href = api.clientReportUrl(state.docId, true);
     a.download = '';
     document.body.appendChild(a);
     a.click();
@@ -33,6 +45,16 @@ export function ExportStep({ state, onReset }: ExportStepProps) {
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+
+  if (showClientReport && state.summary) {
+    return (
+      <ClientProtectionReport
+        summary={state.summary}
+        onBack={() => setShowClientReport(false)}
+        onDownload={handleDownloadClientReport}
+      />
+    );
+  }
 
   return (
     <div className="max-w-4xl mx-auto mt-8 px-4 pb-12 animate-fade-in">
@@ -131,21 +153,32 @@ export function ExportStep({ state, onReset }: ExportStepProps) {
           </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-2">
+        <div className="grid sm:grid-cols-2 gap-3 pt-2">
           <button
             onClick={handleDownload}
-            className="flex items-center gap-3 px-8 py-4 bg-primary text-on-primary rounded-full font-bold hover:bg-primary-container shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all w-full sm:w-auto justify-center"
+            className="flex items-center gap-3 px-6 py-4 bg-primary text-on-primary rounded-2xl font-bold hover:bg-primary-container shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all justify-center"
           >
             <Download className="w-5 h-5" />
-            Download Protected Markdown
+            Download protected document
           </button>
-          
+
+          <button
+            onClick={() => setShowClientReport(true)}
+            disabled={!state.summary}
+            className="flex items-center gap-3 px-6 py-4 bg-surface text-on-surface rounded-2xl border border-outline-variant font-bold hover:border-primary/40 hover:text-primary transition-all justify-center disabled:opacity-50"
+          >
+            <Presentation className="w-5 h-5" />
+            View client protection report
+          </button>
+        </div>
+
+        <div className="flex justify-center">
           <button
             onClick={onReset}
-            className="flex items-center gap-2 px-6 py-4 bg-surface-container-high text-on-surface rounded-full font-bold hover:bg-outline-variant transition-colors w-full sm:w-auto justify-center"
+            className="flex items-center gap-2 px-5 py-3 text-on-surface-variant font-semibold hover:text-on-surface transition-colors"
           >
             <RotateCcw className="w-4 h-4" />
-            Start Over
+            Start over
           </button>
         </div>
       </div>
