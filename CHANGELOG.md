@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-09-30 — Client-facing Protection Report
+
+- Added a separate read-only client/executive Protection Report surface.
+- Added deterministic protection status, coverage, sensitive-data footprint, reviewer outcome, and material exception sections.
+- Added masked-only in-app review details with no raw PII values.
+- Added downloadable local HTML protection reports containing aggregated evidence only.
+- Added `GET /api/export/{doc_id}/report` with optional download mode.
+- Sanitized client-facing export filenames.
+- Added regression tests proving raw PII is absent from downloadable client reports.
+- Kept runtime/model internals and benchmark metrics out of the client-facing hierarchy.
+
 ## 2026-09-30 — Protection review UX baseline
 
 - Added opaque occurrence (`occ_...`) and entity (`ent_...`) identifiers so review state no longer embeds raw PII in UI IDs.
