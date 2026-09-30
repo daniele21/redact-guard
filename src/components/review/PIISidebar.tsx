@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { PIIField, PageAnalysisResult } from '../../types';
 import { PII_CATEGORIES } from '../../config/theme.config';
 import { Shield, ShieldAlert, Zap, Eye, EyeOff, ShieldOff, ChevronDown, ChevronRight, ExternalLink } from 'lucide-react';
+import { fieldId } from './reviewIdentity';
 
 interface PIISidebarProps {
   fields: PIIField[];
@@ -49,8 +50,8 @@ export function PIISidebar({
   // Group fields for a specific set of fields
   const getGroupedFields = (fieldsToGroup: PIIField[], pNum: number) => {
     return fieldsToGroup.reduce((acc, field) => {
-      const fieldId = `${pNum}_${field.pii_type}_${field.value}`;
-      if (excludedFields.has(fieldId)) return acc;
+      const occurrenceId = fieldId(field, pNum);
+      if (excludedFields.has(occurrenceId)) return acc;
 
       if (!acc[field.pii_type]) acc[field.pii_type] = {};
       
@@ -63,15 +64,16 @@ export function PIISidebar({
       
       acc[field.pii_type][field.value].occurrences.push({
         start: field.start,
-        end: field.end
+        end: field.end,
+        findingId: occurrenceId,
       });
       
       return acc;
-    }, {} as Record<string, Record<string, { field_name: string, occurrences: Array<{start: number|null, end: number|null}> }>>);
+    }, {} as Record<string, Record<string, { field_name: string, occurrences: Array<{start: number|null, end: number|null, findingId: string}> }>>);
   };
 
   const currentGrouped = getGroupedFields(fields, pageNumber);
-  const excludedCount = fields.filter(f => excludedFields.has(`${pageNumber}_${f.pii_type}_${f.value}`)).length;
+  const excludedCount = fields.filter(f => excludedFields.has(fieldId(f, pageNumber))).length;
   const activeFieldsCount = fields.length - excludedCount;
 
   // Findings from other pages
@@ -80,7 +82,7 @@ export function PIISidebar({
     .map(([num, result]) => ({ 
       pageNum: parseInt(num), 
       fields: result.pii_fields,
-      activeCount: result.pii_fields.filter(f => !excludedFields.has(`${num}_${f.pii_type}_${f.value}`)).length
+      activeCount: result.pii_fields.filter(f => !excludedFields.has(fieldId(f, parseInt(num)))).length
     }))
     .filter(p => p.fields.length > 0)
     .sort((a, b) => a.pageNum - b.pageNum);
@@ -109,12 +111,13 @@ export function PIISidebar({
           </h4>
           <div className="space-y-2">
             {Object.entries(valueGroups).map(([value, info], valIdx) => {
-              const fieldId = `${pNum}_${type}_${value}`;
-              const isRedacted = redactionOverrides[fieldId] !== false;
+              const findingIds = info.occurrences.map(occ => occ.findingId);
+              const isRedacted = findingIds.every(id => redactionOverrides[id] !== false);
+              const primaryFindingId = findingIds[0];
               
               return (
                 <div 
-                  key={`${fieldId}-${valIdx}`}
+                  key={`${primaryFindingId}-${valIdx}`}
                   className={`
                     flex flex-col p-2.5 rounded-xl border transition-all group
                     ${isRedacted 
@@ -135,14 +138,14 @@ export function PIISidebar({
                       {isCurrentPage && (
                         <>
                           <button
-                            onClick={() => onToggleExclusion(fieldId)}
+                            onClick={() => findingIds.forEach(onToggleExclusion)}
                             className="p-1.5 rounded-lg text-on-surface-variant hover:bg-error/10 hover:text-error transition-colors opacity-0 group-hover:opacity-100"
                             title="Exclude from PII"
                           >
                             <ShieldOff className="w-3.5 h-3.5" />
                           </button>
                           <button
-                            onClick={() => onToggleRedaction(fieldId)}
+                            onClick={() => findingIds.forEach(onToggleRedaction)}
                             className={`
                               p-1.5 rounded-lg transition-colors
                               ${isRedacted ? `text-${color} hover:bg-${color}/10` : 'text-on-surface-variant hover:bg-surface-container-high'}
