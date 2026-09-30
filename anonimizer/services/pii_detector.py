@@ -11,6 +11,7 @@ from domain.detection import (
     LLMInferenceResult,
 )
 from domain.models import PageAnalysisResult, PageMarkdown, PIIField
+from services.finding_identity import build_entity_id, build_finding_id
 from services.korgis_client import call_korgis
 from services.output_contract import parse_model_response
 from services.profile_service import get_all_pii_types
@@ -115,12 +116,21 @@ def detect_pii_for_page(
 
                 if span not in seen_spans:
                     seen_spans.add(span)
+                    source_value = page.text[real_start:real_end]
                     pii_fields.append(
                         PIIField(
+                            finding_id=build_finding_id(
+                                page_number=page.page_number,
+                                pii_type=field.pii_type,
+                                start=real_start,
+                                end=real_end,
+                                value=source_value,
+                            ),
+                            entity_id=build_entity_id(field.pii_type, source_value),
                             field_name=definition.label,
                             field_description=definition.description,
                             pii_type=field.pii_type,
-                            value=page.text[real_start:real_end],
+                            value=source_value,
                             redacted_value=f"[REDACTED_{field.pii_type.upper()}]",
                             start=real_start,
                             end=real_end,
