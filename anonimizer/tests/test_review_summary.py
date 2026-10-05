@@ -7,6 +7,7 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
+from domain.detection import DetectionDiagnostics
 from domain.models import (
     DocumentSession,
     PageMarkdown,
@@ -99,6 +100,56 @@ class SummaryTests(unittest.TestCase):
         self.assertEqual(summary.decision_counts["keep"], 1)
         self.assertEqual(summary.entities[0].occurrence_count, 2)
         self.assertNotIn("Mario Rossi", summary.entities[0].masked_value)
+
+    def test_document_summary_aggregates_resource_peaks_and_weighted_cpu(self):
+        session, _, _ = _session()
+        session.page_diagnostics = {
+            1: DetectionDiagnostics(
+                model="demo",
+                chunks=1,
+                cache_hits=0,
+                inference_requests=1,
+                resource_evidence_requests=1,
+                peak_memory_bytes=500,
+                peak_memory_delta_bytes=200,
+                average_cpu_percent=100.0,
+                peak_cpu_percent=150.0,
+                resource_cpu_sample_count=2,
+                resource_sampling_interval_ms=100,
+                resource_attribution_scopes=["korgis_process_tree"],
+                resource_attribution_qualities=["process_global"],
+            ),
+            2: DetectionDiagnostics(
+                model="demo",
+                chunks=1,
+                cache_hits=1,
+                inference_requests=1,
+                resource_evidence_requests=1,
+                peak_memory_bytes=700,
+                peak_memory_delta_bytes=300,
+                average_cpu_percent=200.0,
+                peak_cpu_percent=260.0,
+                resource_cpu_sample_count=6,
+                resource_sampling_interval_ms=100,
+                resource_attribution_scopes=["korgis_process_tree"],
+                resource_attribution_qualities=["process_global"],
+            ),
+        }
+
+        summary = build_document_summary(session)
+
+        self.assertEqual(summary.resources.inference_requests, 2)
+        self.assertEqual(summary.resources.cache_hits, 1)
+        self.assertEqual(summary.resources.evidence_requests, 2)
+        self.assertEqual(summary.resources.peak_memory_bytes, 700)
+        self.assertEqual(summary.resources.peak_memory_delta_bytes, 300)
+        self.assertEqual(summary.resources.peak_cpu_percent, 260.0)
+        self.assertEqual(summary.resources.average_cpu_percent, 175.0)
+        self.assertEqual(summary.resources.cpu_sample_count, 8)
+        self.assertEqual(
+            summary.resources.attribution_qualities,
+            ["process_global"],
+        )
 
     def test_failed_page_makes_document_status_failed(self):
         session, _, _ = _session()
