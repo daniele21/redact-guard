@@ -19,6 +19,8 @@ export interface DetectionDiagnostics {
   peak_memory_delta_bytes?: number | null;
   average_cpu_percent?: number | null;
   peak_cpu_percent?: number | null;
+  resource_cpu_sample_count?: number | null;
+  resource_sampling_interval_ms?: number | null;
   resource_attribution_scopes?: string[];
   resource_attribution_qualities?: string[];
 }
