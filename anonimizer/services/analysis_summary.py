@@ -134,6 +134,16 @@ def _document_resource_summary(session: DocumentSession) -> DocumentResourceSumm
                         for item in cpu_entries
                     )
 
+    memory_sources = sorted({
+        source
+        for item in evidence_diagnostics
+        for source in item.resource_memory_sources
+    })
+    cpu_sources = sorted({
+        source
+        for item in evidence_diagnostics
+        for source in item.resource_cpu_sources
+    })
     scopes = sorted({
         scope
         for item in evidence_diagnostics
@@ -156,6 +166,8 @@ def _document_resource_summary(session: DocumentSession) -> DocumentResourceSumm
         cpu_sample_count=cpu_sample_count,
         sampling_interval_ms=sampling_interval,
         cpu_observation_ms=cpu_observation_ms,
+        memory_sources=memory_sources,
+        cpu_sources=cpu_sources,
         attribution_scopes=scopes,
         attribution_qualities=qualities,
     )
