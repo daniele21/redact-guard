@@ -32,11 +32,17 @@ def health_check():
         protocol_version = compatibility.identity_protocol
         compatibility_status = compatibility.status
         request_evidence_supported = compatibility.request_evidence_supported
-        llm_status = (
-            "online"
-            if compatibility.model_resident
-            else "model_not_resident"
-        )
+        if (
+            config.korgis_mode == "managed"
+            and compatibility.status != "compatible"
+        ):
+            llm_status = "runtime_incompatible"
+        else:
+            llm_status = (
+                "online"
+                if compatibility.model_resident
+                else "model_not_resident"
+            )
     except Exception:
         llm_status = "offline"
 
