@@ -74,7 +74,6 @@ class KorgisSamplingInfo:
     sample_count: int | None = None
     errors: int | None = None
     cpu_observation_ms: float | None = None
-    cpu_observation_ms: float | None = None
 
 
 @dataclass(frozen=True)
