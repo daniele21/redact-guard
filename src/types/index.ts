@@ -20,6 +20,7 @@ export interface DetectionDiagnostics {
   average_cpu_percent?: number | null;
   peak_cpu_percent?: number | null;
   resource_cpu_sample_count?: number | null;
+  resource_cpu_observation_ms?: number | null;
   resource_sampling_interval_ms?: number | null;
   resource_attribution_scopes?: string[];
   resource_attribution_qualities?: string[];
@@ -106,6 +107,7 @@ export interface DocumentResourceSummary {
   peak_cpu_percent: number | null;
   cpu_sample_count: number | null;
   sampling_interval_ms: number | null;
+  cpu_observation_ms: number | null;
   attribution_scopes: string[];
   attribution_qualities: string[];
 }
