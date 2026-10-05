@@ -6,9 +6,6 @@ on:
 permissions:
   contents: read
 
-env:
-  KORGIS_CANDIDATE_COMMIT: "eae6d63380cacd03e87c04ddd09f1825088c0149"
-
 jobs:
   backend:
     runs-on: ubuntu-latest
@@ -29,10 +26,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Read pinned Korgis runtime contract
+        id: korgis
+        shell: bash
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          from pathlib import Path
+          payload = json.loads(Path(".engineering/korgis-runtime.json").read_text())
+          print(f"repository={payload['repository']}")
+          print(f"commit={payload['commit']}")
+          print(f"request_evidence_protocol={payload['request_evidence_protocol']}")
+          PY
       - uses: actions/checkout@v4
         with:
-          repository: daniele21/korgis
-          ref: ${{ env.KORGIS_CANDIDATE_COMMIT }}
+          repository: ${{ steps.korgis.outputs.repository }}
+          ref: ${{ steps.korgis.outputs.commit }}
           path: korgis-candidate
       - uses: actions/setup-python@v5
         with:
@@ -47,7 +56,7 @@ jobs:
           test -n "$wheel"
           python scripts/verify-korgis-wheel.py \
             "$wheel" \
-            --expected-commit "$KORGIS_CANDIDATE_COMMIT"
+            --expected-commit "${{ steps.korgis.outputs.commit }}"
 
   frontend:
     runs-on: ubuntu-latest
