@@ -4,6 +4,7 @@ import json
 import time
 import urllib.error
 import urllib.request
+from dataclasses import dataclass
 from typing import Any
 
 from config import config
@@ -18,6 +19,25 @@ from domain.detection import (
     KorgisSamplingInfo,
     LLMInferenceResult,
 )
+
+
+KORGIS_IDENTITY_PROTOCOL = "local-llm-identity-v1"
+
+
+@dataclass(frozen=True)
+class KorgisCompatibility:
+    identity_protocol: str | None
+    identity_compatible: bool
+    request_evidence_supported: bool
+    model_resident: bool
+
+    @property
+    def status(self) -> str:
+        if not self.identity_compatible:
+            return "identity_incompatible"
+        if not self.request_evidence_supported:
+            return "legacy_compatible"
+        return "compatible"
 
 
 class KorgisRuntimeAdapter:
@@ -57,6 +77,42 @@ class KorgisRuntimeAdapter:
 
     def resources(self) -> dict[str, Any]:
         return self._get_json(f"{self.root_url}/api/v1/resources")
+
+    def compatibility(self) -> KorgisCompatibility:
+        health = self.health()
+        models_payload = self.models()
+        identity_payload = self.identity()
+
+        resident: set[str] = set()
+        for item in models_payload.get("data", []):
+            if not isinstance(item, dict):
+                continue
+            for key in ("key", "id"):
+                value = item.get(key)
+                if value:
+                    resident.add(str(value))
+
+        identity_models = identity_payload.get("models")
+        identity_models = identity_models if isinstance(identity_models, dict) else {}
+        protocol = _optional_str(identity_payload.get("protocol_version"))
+
+        advertised_versions = health.get("request_evidence_versions")
+        advertised_versions = (
+            advertised_versions
+            if isinstance(advertised_versions, list)
+            else []
+        )
+
+        return KorgisCompatibility(
+            identity_protocol=protocol,
+            identity_compatible=protocol == KORGIS_IDENTITY_PROTOCOL,
+            request_evidence_supported=(
+                KORGIS_REQUEST_EVIDENCE_VERSION in advertised_versions
+            ),
+            model_resident=(
+                self.model in resident or self.model in identity_models
+            ),
+        )
 
     def infer(self, prompt: str, user_text: str) -> LLMInferenceResult:
         payload = {
