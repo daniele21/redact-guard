@@ -60,6 +60,10 @@ class KorgisInferenceContractTests(unittest.TestCase):
                             "scope": "korgis_process_tree",
                             "quality": "process_global",
                         },
+                        "sources": {
+                            "memory": "ps_process_tree_cpu_time_delta_excluding_sampler",
+                            "cpu": "ps_process_tree_cpu_time_delta_excluding_sampler",
+                        },
                     },
                 },
             }
@@ -81,6 +85,10 @@ class KorgisInferenceContractTests(unittest.TestCase):
         self.assertEqual(
             result.korgis_evidence.resources.sampling.cpu_observation_ms,
             275.0,
+        )
+        self.assertEqual(
+            result.korgis_evidence.resources.cpu_source,
+            "ps_process_tree_cpu_time_delta_excluding_sampler",
         )
         request = mocked.call_args.args[0]
         self.assertEqual(request.full_url, config.llm_endpoint)
