@@ -188,11 +188,18 @@ jobs:
           assert payload["source_commit"] == sys.argv[2]
           assert len(payload["wheel_sha256"]) == 64
           PY
+      - name: Archive app bundle preserving executable permissions
+        shell: bash
+        run: |
+          app_dir="src-tauri/target/aarch64-apple-darwin/release/bundle/macos"
+          archive="redactguard-macos-arm64-pr-${{ github.event.pull_request.number }}.tar.gz"
+          tar -czf "$archive" -C "$app_dir" RedactGuard.app
+          tar -tzf "$archive" >/dev/null
       - name: Upload representative macOS app candidate
         uses: actions/upload-artifact@v4
         with:
           name: redactguard-macos-arm64-pr-${{ github.event.pull_request.number }}
-          path: src-tauri/target/aarch64-apple-darwin/release/bundle/macos/RedactGuard.app
+          path: redactguard-macos-arm64-pr-${{ github.event.pull_request.number }}.tar.gz
           retention-days: 7
           if-no-files-found: error
 

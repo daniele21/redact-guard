@@ -73,8 +73,11 @@ def main() -> int:
         and "runs-on: macos-latest" in validate
         and "pnpm tauri build --bundles app --target aarch64-apple-darwin" in validate
         and 'APPLE_SIGNING_IDENTITY: "-"' in validate
-        and "actions/upload-artifact@v4" in validate,
-        "PR validation must build and retain an ad-hoc signed Apple Silicon app bundle",
+        and "actions/upload-artifact@v4" in validate
+        and "Archive app bundle preserving executable permissions" in validate
+        and 'tar -czf "$archive"' in validate
+        and ".tar.gz" in validate,
+        "PR validation must tar and retain an ad-hoc signed Apple Silicon app bundle without losing executable permissions",
     )
     require(
         "REDACTGUARD_BUILD_TARGET" in packaging
