@@ -6,6 +6,9 @@ on:
 permissions:
   contents: read
 
+env:
+  KORGIS_CANDIDATE_COMMIT: "eae6d63380cacd03e87c04ddd09f1825088c0149"
+
 jobs:
   backend:
     runs-on: ubuntu-latest
@@ -20,6 +23,31 @@ jobs:
         run: python -m compileall -q anonimizer
       - name: Korgis contract tests
         run: python -m unittest discover -s anonimizer/tests -p "test_*.py"
+
+  managed-korgis-contract:
+    name: Managed Korgis wheel contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: daniele21/korgis
+          ref: ${{ env.KORGIS_CANDIDATE_COMMIT }}
+          path: korgis-candidate
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Build pinned Korgis wheel
+        run: |
+          python -m pip install "build==1.2.2.post1"
+          python -m build --wheel --outdir korgis-dist korgis-candidate
+      - name: Verify RedactGuard managed-runtime contract
+        run: |
+          wheel="$(find korgis-dist -maxdepth 1 -type f -name '*.whl' -print -quit)"
+          test -n "$wheel"
+          python scripts/verify-korgis-wheel.py \
+            "$wheel" \
+            --expected-commit "$KORGIS_CANDIDATE_COMMIT"
 
   frontend:
     runs-on: ubuntu-latest
