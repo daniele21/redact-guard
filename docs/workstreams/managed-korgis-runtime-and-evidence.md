@@ -48,7 +48,7 @@ RedactGuard owns PII policy/prompts, document processing, deterministic span res
 
 ## Current executable slice
 
-`RG-9`; product implementation is complete for the RedactGuard-owned surface
+`RG-9`; product implementation and repository-owned packaged E2E runner are complete for the RedactGuard-owned surface
 
 Acceptance:
 
@@ -86,7 +86,8 @@ Managed mode still uses a separate Korgis process. RedactGuard must not import/c
 - frontend typecheck/build when UI slices start;
 - Rust formatting/check when sidecar lifecycle changes;
 - CI is the deterministic fallback because the current agent environment cannot resolve GitHub/package network dependencies locally;
-- packaged runtime behavior is validated separately from deterministic parsing/aggregation contracts.
+- packaged runtime behavior is validated separately from deterministic parsing/aggregation contracts;
+- `scripts/run-managed-package-e2e.py` is the canonical representative macOS runner and retains only bounded privacy-safe evidence.
 
 ## Documentation destinations
 
@@ -102,11 +103,11 @@ Managed mode still uses a separate Korgis process. RedactGuard must not import/c
 - old `feature/korgis-runtime-integration` intentionally not reused because it is materially diverged from main.
 - confirmed: main already delegates inference to Korgis and has a typed `LLMInferenceResult`, but only consumes content/token usage and application latency.
 - PR #8 passed the complete Validate PR matrix on the merged Korgis pin (run 65): backend, frontend, Rust/Tauri lifecycle, sidecar staging, packaging-script syntax and the managed Korgis wheel contract were all PASS. Any later tracked-file edit still requires exact-head revalidation before merge.
-- canonical Korgis pin: `.engineering/korgis-runtime.json` -> `14a9a16d4326f2dba93982544b5879c37dde261d`; Korgis candidate is merged onto current `main`; exact-head FULL CI run 691 and Repository Health 383 both PASS on `14a9a16d4326f2dba93982544b5879c37dde261d`.
+- canonical Korgis pin: `.engineering/korgis-runtime.json` -> `809511e2ba33bfb61ab195bf32ca4152b759c293`; Korgis candidate is merged onto current `main`; exact-head FULL CI run 691 and Repository Health 383 both PASS on `809511e2ba33bfb61ab195bf32ca4152b759c293`.
 - managed packaging strategy: release workflow builds the pinned Korgis wheel, verifies `korgis-request-evidence-v1`, computes SHA-256 and packages it into a separate Korgis venv. No Korgis package is imported by the RedactGuard backend, and models remain Korgis-owned durable data.
 - packaged desktop defaults to managed mode; development/backend standalone defaults to external unless explicitly overridden.
 - RG-8 is intentionally deferred to the existing companion Performance Lab/experiment because current RedactGuard has no canonical benchmark-UI owner. Do not create a parallel benchmark surface here.
-- next discriminating action: keep exact-head automated validation green, then run the packaged macOS managed-runtime E2E with a real supported model.
+- next discriminating action: keep exact-head automated validation green, then run `scripts/run-managed-package-e2e.py` against the built macOS `.app` with a real supported model and retain the bounded summary.
 
 ## Completion
 

@@ -14,7 +14,7 @@ Released/legacy baseline:
 Integration candidate:
 
 - repository: `daniele21/korgis`
-- commit: `14a9a16d4326f2dba93982544b5879c37dde261d`
+- commit: `809511e2ba33bfb61ab195bf32ca4152b759c293`
 - request evidence protocol: `korgis-request-evidence-v1`
 - RedactGuard CI builds a wheel from this exact commit and verifies the packaged contract before managed-runtime integration is considered deterministic-ready.
 
@@ -132,3 +132,22 @@ In development, managed mode requires an explicit `KORGIS_PYTHON` pointing to a 
 The bundle manifest records package version, wheel SHA-256 and Korgis source commit. The model itself is not bundled by this mechanism. Model acquisition, verification, cache location and lifecycle remain Korgis responsibilities.
 
 Managed mode fails closed when Korgis does not advertise both the expected runtime identity semantics and `korgis-request-evidence-v1`; external mode remains backwards-compatible with a legacy Korgis instance and simply reports request resource evidence as unavailable.
+
+### Representative packaged managed-runtime E2E
+
+The repository-owned macOS runner exercises the actual packaged sidecar and packaged Korgis environment without retaining document content or findings:
+
+\`\`\`bash
+E2E_DIR="$HOME/.redactguard/evidence/$(date +%F)-managed-package"
+
+python scripts/run-managed-package-e2e.py \
+  --app "/path/to/RedactGuard.app" \
+  --model "<supported-model-key>" \
+  --redactguard-source-commit "$(git rev-parse HEAD)" \
+  --expected-korgis-commit "$(python -c 'import json; print(json.load(open(".engineering/korgis-runtime.json"))["commit"])')" \
+  --output-dir "$E2E_DIR"
+\`\`\`
+
+The runner starts the packaged Korgis launcher and packaged RedactGuard API on temporary loopback ports, verifies the package manifest/source pin, uploads a generated one-page synthetic PDF, executes one real PII analysis, verifies document-level CPU/RAM evidence and shuts both packaged processes down. Raw logs remain local; the bounded summary retains no document content, findings, private paths or PIDs.
+
+This is REAL_ENVIRONMENT evidence: CI proves the deterministic packaging/orchestration contract, while this runner proves the packaged managed runtime actually executes on representative macOS hardware with a real supported model.
