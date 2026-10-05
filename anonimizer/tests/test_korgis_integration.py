@@ -112,6 +112,26 @@ class KorgisHealthContractTests(unittest.TestCase):
         self.assertTrue(health.korgis_request_evidence_supported)
         self.assertEqual(health.korgis_mode, config.korgis_mode)
 
+    def test_managed_mode_rejects_legacy_korgis_without_request_evidence(self):
+        compatibility = KorgisCompatibility(
+            identity_protocol="local-llm-identity-v1",
+            identity_compatible=True,
+            request_evidence_supported=False,
+            model_resident=True,
+        )
+        with (
+            patch.object(config, "korgis_mode", "managed"),
+            patch(
+                "api.routes_health.KorgisRuntimeAdapter.compatibility",
+                return_value=compatibility,
+            ),
+        ):
+            health = routes_health.health_check()
+
+        self.assertEqual(health.llm_status, "runtime_incompatible")
+        self.assertEqual(health.korgis_compatibility, "legacy_compatible")
+        self.assertFalse(health.korgis_request_evidence_supported)
+
     def test_health_distinguishes_unreachable_korgis(self):
         with patch(
             "api.routes_health.KorgisRuntimeAdapter.compatibility",
