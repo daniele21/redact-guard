@@ -129,6 +129,7 @@ class DetectionDiagnostics(BaseModel):
     resource_cpu_sample_count: int | None = None
     resource_cpu_observation_ms: float | None = None
     resource_sampling_interval_ms: int | None = None
+    resource_memory_sources: list[str] = Field(default_factory=list)
     resource_cpu_sources: list[str] = Field(default_factory=list)
     resource_attribution_scopes: list[str] = Field(default_factory=list)
     resource_attribution_qualities: list[str] = Field(default_factory=list)
