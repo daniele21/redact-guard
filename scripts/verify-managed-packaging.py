@@ -6,6 +6,8 @@ import json
 import re
 from pathlib import Path
 
+import yaml
+
 ROOT = Path(__file__).resolve().parents[1]
 PIN = ROOT / ".engineering" / "korgis-runtime.json"
 
@@ -33,8 +35,14 @@ def main() -> int:
         "managed packaging must preserve the Korgis process/environment boundary",
     )
 
-    validate = (ROOT / ".github" / "workflows" / "validate.yml").read_text(encoding="utf-8")
-    build = (ROOT / ".github" / "workflows" / "build.yml").read_text(encoding="utf-8")
+    validate_path = ROOT / ".github" / "workflows" / "validate.yml"
+    build_path = ROOT / ".github" / "workflows" / "build.yml"
+    validate = validate_path.read_text(encoding="utf-8")
+    build = build_path.read_text(encoding="utf-8")
+    for path, content in ((validate_path, validate), (build_path, build)):
+        parsed = yaml.safe_load(content)
+        require(isinstance(parsed, dict), f"{path.name} must parse as a YAML mapping")
+        require("jobs" in parsed, f"{path.name} must define jobs")
     packaging = (ROOT / "scripts" / "build-sidecar.sh").read_text(encoding="utf-8")
     tauri = (ROOT / "src-tauri" / "src" / "sidecar.rs").read_text(encoding="utf-8")
 
