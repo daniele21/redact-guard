@@ -11,16 +11,29 @@ RedactGuard delegates **all local model runtime responsibilities** to Korgis. It
 
 This revision is the compatibility baseline because it includes the recent local Qwen3.5 Q4_K_M registry additions used by the RedactGuard benchmark.
 
-## Public boundary used by RedactGuard
+## Runtime boundary used by RedactGuard
+
+Public/read-only and inference paths:
 
 ```text
 GET  /health
+GET  /status
 GET  /v1/models
 GET  /v1/runtime/identity
 POST /v1/chat/completions
 ```
 
-RedactGuard does not require the Korgis admin API for normal product use.
+Managed desktop mode may additionally enable Korgis administrative control-plane routes for model lifecycle and resource-policy inspection:
+
+```text
+GET  /api/v1/models/registry
+POST /api/v1/models/load
+POST /api/v1/models/activate
+DELETE /api/v1/models/{model}
+GET  /api/v1/resources
+```
+
+External/developer mode must remain usable without assuming administrative access.
 
 ## Default runtime configuration
 
@@ -63,3 +76,18 @@ For PII extraction RedactGuard requests JSON output, temperature 0, and disables
 ## Benchmark alignment
 
 The companion experiment is `daniele21/experiments/experiments/redactguard-local-anonymization`. It uses the same Korgis HTTP boundary and freezes the RedactGuard prompt/taxonomy/post-processing contract for reproducible model comparisons.
+
+
+## Request resource evidence
+
+RedactGuard consumes the additive Korgis request evidence protocol `korgis-request-evidence-v1` when present. The contract is optional for backwards compatibility: inference content remains authoritative even when request resource evidence is unavailable.
+
+RedactGuard preserves these distinctions:
+
+- application-boundary latency measured by RedactGuard is not relabelled as backend-only latency;
+- Korgis measured process-tree CPU/RAM is not confused with configured resource budgets;
+- `execution_source=cache` contributes no new inference CPU/RAM cost;
+- RAM peaks are aggregated with `max`, never by summation;
+- attribution quality such as `process_global` remains visible and is not promoted to request-exclusive ownership.
+
+Korgis measures and qualifies resource evidence. RedactGuard consumes, stores, aggregates and presents it; RedactGuard does not implement a second CPU/RAM sampler.
