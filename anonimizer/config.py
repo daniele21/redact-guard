@@ -89,6 +89,10 @@ class AppConfig:
         ).split(",")
     )
 
+    korgis_mode: str = os.getenv(
+        "KORGIS_MODE",
+        _server_conf.get("korgis_mode", "external"),
+    ).strip().lower()
     korgis_base_url: str = os.getenv(
         "KORGIS_BASE_URL",
         _server_conf.get("korgis_base_url", "http://127.0.0.1:1235/v1"),
@@ -130,6 +134,12 @@ class AppConfig:
     )
 
     cache: CacheConfig = field(default_factory=CacheConfig)
+
+    def __post_init__(self) -> None:
+        if self.korgis_mode not in {"external", "managed"}:
+            raise ValueError(
+                "KORGIS_MODE must be 'external' or 'managed'"
+            )
 
     @property
     def llm_endpoint(self) -> str:

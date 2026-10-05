@@ -6,11 +6,16 @@ mod sidecar;
 struct SidecarState {
     api_child: Mutex<Option<CommandChild>>,
     api_port: Mutex<u16>,
+    korgis_child: Mutex<Option<CommandChild>>,
+    korgis_port: Mutex<Option<u16>>,
 }
 
 impl Drop for SidecarState {
     fn drop(&mut self) {
         if let Some(child) = self.api_child.lock().unwrap().take() {
+            let _ = child.kill();
+        }
+        if let Some(child) = self.korgis_child.lock().unwrap().take() {
             let _ = child.kill();
         }
     }
@@ -34,6 +39,8 @@ pub fn run() {
         .manage(SidecarState {
             api_child: Mutex::new(None),
             api_port: Mutex::new(8000),
+            korgis_child: Mutex::new(None),
+            korgis_port: Mutex::new(None),
         })
         .setup(|app| {
             let handle = app.handle().clone();

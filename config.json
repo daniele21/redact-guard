@@ -12,7 +12,8 @@
     "llm_timeout": 600,
     "llm_max_output_tokens": 4096,
     "llm_chunk_max_chars": 4000,
-    "llm_chunk_overlap_chars": 256
+    "llm_chunk_overlap_chars": 256,
+    "korgis_mode": "external"
   },
   "app": {
     "session_ttl_minutes": 30,

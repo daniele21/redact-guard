@@ -15,6 +15,7 @@ from services.finding_identity import build_entity_id, build_finding_id
 from services.korgis_client import call_korgis
 from services.output_contract import parse_model_response
 from services.profile_service import get_all_pii_types
+from services.resource_evidence import ResourceEvidenceAccumulator
 from services.prompt_builder import build_system_prompt
 from services.text_segments import segment_text
 from utils.span_utils import _find_whitespace_normalized_span
@@ -55,6 +56,7 @@ def detect_pii_for_page(
     parsed_items = 0
     resolved_items = 0
     unresolved_items = 0
+    resource_evidence = ResourceEvidenceAccumulator()
 
     cache_variant = (
         f"{DETECTION_CONTRACT_VERSION};"
@@ -83,6 +85,7 @@ def detect_pii_for_page(
             output_tokens = _add_optional(output_tokens, inference.output_tokens)
             if inference.finish_reason:
                 finish_reasons.append(inference.finish_reason)
+            resource_evidence.record_inference(inference.korgis_evidence)
 
         parsed = parse_model_response(
             raw_response,
@@ -166,6 +169,8 @@ def detect_pii_for_page(
             "resolved to the source text and were not redacted."
         )
 
+    resource_summary = resource_evidence.summary()
+
     diagnostics = DetectionDiagnostics(
         model=config.korgis_model,
         chunks=len(segments),
@@ -177,6 +182,19 @@ def detect_pii_for_page(
         parsed_items=parsed_items,
         resolved_items=resolved_items,
         unresolved_items=unresolved_items,
+        inference_requests=resource_summary.inference_requests,
+        resource_evidence_requests=resource_summary.evidence_requests,
+        peak_memory_bytes=resource_summary.peak_memory_bytes,
+        peak_memory_delta_bytes=resource_summary.peak_memory_delta_bytes,
+        average_cpu_percent=resource_summary.average_cpu_percent,
+        peak_cpu_percent=resource_summary.peak_cpu_percent,
+        resource_cpu_sample_count=resource_summary.cpu_sample_count,
+        resource_cpu_observation_ms=resource_summary.cpu_observation_ms,
+        resource_sampling_interval_ms=resource_summary.sampling_interval_ms,
+        resource_memory_sources=list(resource_summary.memory_sources),
+        resource_cpu_sources=list(resource_summary.cpu_sources),
+        resource_attribution_scopes=list(resource_summary.attribution_scopes),
+        resource_attribution_qualities=list(resource_summary.attribution_qualities),
     )
 
     return PageAnalysisResult(

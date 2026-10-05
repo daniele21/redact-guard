@@ -10,6 +10,7 @@ if str(BACKEND_DIR) not in sys.path:
 
 from config import config
 from services.pii_detector import call_local_llm
+from services.korgis_client import KorgisCompatibility, KorgisRuntimeAdapter
 from api import routes_health
 
 
@@ -30,7 +31,42 @@ class FakeResponse:
 class KorgisInferenceContractTests(unittest.TestCase):
     def test_inference_uses_korgis_openai_boundary_and_json_contract(self):
         response = FakeResponse(
-            {"choices": [{"message": {"content": '{"pii_fields":[]}'}}]}
+            {
+                "choices": [{"message": {"content": '{"pii_fields":[]}'}}],
+                "usage": {"prompt_tokens": 10, "completion_tokens": 4},
+                "korgis": {
+                    "evidence_version": "korgis-request-evidence-v1",
+                    "request_id": "req-test",
+                    "execution_source": "inference",
+                    "resources": {
+                        "snapshot_id": "resource-test",
+                        "memory": {
+                            "baseline_bytes": 100,
+                            "peak_bytes": 150,
+                            "end_bytes": 120,
+                            "peak_delta_bytes": 50,
+                        },
+                        "cpu": {
+                            "average_percent": 125.0,
+                            "peak_percent": 200.0,
+                        },
+                        "sampling": {
+                            "interval_ms": 100,
+                            "sample_count": 3,
+                            "errors": 0,
+                            "cpu_observation_ms": 275.0,
+                        },
+                        "attribution": {
+                            "scope": "korgis_process_tree",
+                            "quality": "process_global",
+                        },
+                        "sources": {
+                            "memory": "ps_process_tree_cpu_time_delta_excluding_sampler",
+                            "cpu": "ps_process_tree_cpu_time_delta_excluding_sampler",
+                        },
+                    },
+                },
+            }
         )
         with patch(
             "services.korgis_client.urllib.request.urlopen",
@@ -39,6 +75,21 @@ class KorgisInferenceContractTests(unittest.TestCase):
             result = call_local_llm("system prompt", "document text")
 
         self.assertEqual(result.content, '{"pii_fields":[]}')
+        self.assertEqual(result.input_tokens, 10)
+        self.assertEqual(result.output_tokens, 4)
+        self.assertIsNotNone(result.korgis_evidence)
+        self.assertEqual(result.korgis_evidence.request_id, "req-test")
+        self.assertEqual(result.korgis_evidence.execution_source, "inference")
+        self.assertEqual(result.korgis_evidence.resources.memory.peak_bytes, 150)
+        self.assertEqual(result.korgis_evidence.resources.cpu.peak_percent, 200.0)
+        self.assertEqual(
+            result.korgis_evidence.resources.sampling.cpu_observation_ms,
+            275.0,
+        )
+        self.assertEqual(
+            result.korgis_evidence.resources.cpu_source,
+            "ps_process_tree_cpu_time_delta_excluding_sampler",
+        )
         request = mocked.call_args.args[0]
         self.assertEqual(request.full_url, config.llm_endpoint)
 
@@ -52,17 +103,16 @@ class KorgisInferenceContractTests(unittest.TestCase):
 
 class KorgisHealthContractTests(unittest.TestCase):
     def test_health_reports_online_when_configured_model_is_resident(self):
-        def fake_get(url, timeout=2.0):
-            if url.endswith("/models"):
-                return {"data": [{"id": config.korgis_model}]}
-            if url.endswith("/runtime/identity"):
-                return {
-                    "protocol_version": "local-llm-identity-v1",
-                    "models": {config.korgis_model: {"model_id": "test"}},
-                }
-            raise AssertionError(url)
-
-        with patch("api.routes_health._get_json", side_effect=fake_get):
+        compatibility = KorgisCompatibility(
+            identity_protocol="local-llm-identity-v1",
+            identity_compatible=True,
+            request_evidence_supported=True,
+            model_resident=True,
+        )
+        with patch(
+            "api.routes_health.KorgisRuntimeAdapter.compatibility",
+            return_value=compatibility,
+        ):
             health = routes_health.health_check()
 
         self.assertEqual(health.llm_status, "online")
@@ -71,12 +121,96 @@ class KorgisHealthContractTests(unittest.TestCase):
             health.korgis_protocol_version,
             "local-llm-identity-v1",
         )
+        self.assertEqual(health.korgis_compatibility, "compatible")
+        self.assertTrue(health.korgis_request_evidence_supported)
+        self.assertEqual(health.korgis_mode, config.korgis_mode)
+
+    def test_managed_mode_rejects_legacy_korgis_without_request_evidence(self):
+        compatibility = KorgisCompatibility(
+            identity_protocol="local-llm-identity-v1",
+            identity_compatible=True,
+            request_evidence_supported=False,
+            model_resident=True,
+        )
+        with (
+            patch.object(config, "korgis_mode", "managed"),
+            patch(
+                "api.routes_health.KorgisRuntimeAdapter.compatibility",
+                return_value=compatibility,
+            ),
+        ):
+            health = routes_health.health_check()
+
+        self.assertEqual(health.llm_status, "runtime_incompatible")
+        self.assertEqual(health.korgis_compatibility, "legacy_compatible")
+        self.assertFalse(health.korgis_request_evidence_supported)
 
     def test_health_distinguishes_unreachable_korgis(self):
-        with patch("api.routes_health._get_json", side_effect=OSError("offline")):
+        with patch(
+            "api.routes_health.KorgisRuntimeAdapter.compatibility",
+            side_effect=OSError("offline"),
+        ):
             health = routes_health.health_check()
         self.assertEqual(health.llm_status, "offline")
+        self.assertIsNone(health.korgis_compatibility)
+
+
 
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class KorgisRuntimeAdapterTests(unittest.TestCase):
+    def test_runtime_adapter_keeps_public_and_admin_urls_separate(self):
+        adapter = KorgisRuntimeAdapter(
+            base_url="http://127.0.0.1:1235/v1",
+            model="demo",
+            timeout=2,
+        )
+        payloads = [
+            {"ok": True},
+            {"data": []},
+            {"protocol_version": "local-llm-identity-v1"},
+            {"state": "ready"},
+            {"enabled": True},
+        ]
+        with patch(
+            "services.korgis_client.urllib.request.urlopen",
+            side_effect=[FakeResponse(item) for item in payloads],
+        ) as mocked:
+            adapter.health()
+            adapter.models()
+            adapter.identity()
+            adapter.status()
+            adapter.resources()
+
+        urls = [call.args[0].full_url for call in mocked.call_args_list]
+        self.assertEqual(
+            urls,
+            [
+                "http://127.0.0.1:1235/health",
+                "http://127.0.0.1:1235/v1/models",
+                "http://127.0.0.1:1235/v1/runtime/identity",
+                "http://127.0.0.1:1235/status",
+                "http://127.0.0.1:1235/api/v1/resources",
+            ],
+        )
+
+    def test_unknown_optional_evidence_version_does_not_break_pii_result(self):
+        response = FakeResponse(
+            {
+                "choices": [{"message": {"content": '{"pii_fields":[]}'}}],
+                "korgis": {
+                    "evidence_version": "future-version",
+                    "resources": {"memory": {"peak_bytes": "not-a-number"}},
+                },
+            }
+        )
+        with patch(
+            "services.korgis_client.urllib.request.urlopen",
+            return_value=response,
+        ):
+            result = call_local_llm("system prompt", "document text")
+
+        self.assertIsNone(result.korgis_evidence)
