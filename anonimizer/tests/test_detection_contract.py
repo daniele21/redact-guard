@@ -217,6 +217,7 @@ class DetectionPipelineTests(unittest.TestCase):
                             interval_ms=100,
                             sample_count=2,
                             errors=0,
+                            cpu_observation_ms=100.0,
                         ),
                         attribution_scope="korgis_process_tree",
                         attribution_quality="process_global",
@@ -248,6 +249,7 @@ class DetectionPipelineTests(unittest.TestCase):
                             interval_ms=100,
                             sample_count=6,
                             errors=0,
+                            cpu_observation_ms=900.0,
                         ),
                         attribution_scope="korgis_process_tree",
                         attribution_quality="process_global",
@@ -274,7 +276,8 @@ class DetectionPipelineTests(unittest.TestCase):
         self.assertEqual(result.diagnostics.peak_memory_bytes, 700)
         self.assertEqual(result.diagnostics.peak_memory_delta_bytes, 580)
         self.assertEqual(result.diagnostics.peak_cpu_percent, 260.0)
-        self.assertEqual(result.diagnostics.average_cpu_percent, 175.0)
+        self.assertEqual(result.diagnostics.average_cpu_percent, 190.0)
+        self.assertEqual(result.diagnostics.resource_cpu_observation_ms, 1000.0)
         self.assertEqual(
             result.diagnostics.resource_attribution_qualities,
             ["process_global"],
