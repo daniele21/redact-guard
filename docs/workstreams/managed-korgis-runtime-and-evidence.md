@@ -1,6 +1,6 @@
 # Managed Korgis Runtime and Request Evidence
 
-Status: active
+Status: implementation complete; packaged REAL_ENVIRONMENT validation pending
 Owner: RedactGuard runtime integration
 Read when: changing Korgis lifecycle integration, inference diagnostics, resource evidence, benchmark aggregation or Local AI status UX
 
@@ -38,17 +38,17 @@ RedactGuard owns PII policy/prompts, document processing, deterministic span res
 | --- | --- | --- | --- | --- | --- |
 | RG-1 | Add typed Korgis request-evidence contract and parse additive response fields | `domain/detection.py`, `services/korgis_client.py`, tests | — | yes | DONE |
 | RG-2 | Evolve Korgis client into runtime adapter for health/identity/models/status/resources | runtime integration service + tests | — | yes | DONE |
-| RG-3 | Add managed/external runtime mode and sidecar lifecycle | config/sidecar/Tauri startup | RG-2 | yes | ACTIVE |
+| RG-3 | Add managed/external runtime mode and sidecar lifecycle | config/sidecar/Tauri startup | RG-2 | yes | DONE |
 | RG-4 | Add Korgis compatibility/capability gate | health/runtime contract | RG-2 | yes | DONE |
 | RG-5 | Preserve inference/cache evidence semantics through PII detection | detector/cache diagnostics | RG-1 | yes | DONE |
-| RG-6 | Aggregate request -> chunk/page -> document/run evidence | domain/service aggregator + tests | RG-1, RG-5 | yes | ACTIVE |
-| RG-7 | Product UX: Local AI readiness + progressive run details | frontend types/components/routes | RG-2, RG-6 | yes | ACTIVE |
-| RG-8 | Benchmark UX: model/config/dataset resource comparison | benchmark UI/data projections | RG-6 | yes | READY |
-| RG-9 | End-to-end validation and docs sync | tests/docs/packaging | RG-1..RG-8 | no | BLOCKED |
+| RG-6 | Aggregate request -> chunk/page -> document/run evidence | domain/service aggregator + tests | RG-1, RG-5 | yes | DONE |
+| RG-7 | Product UX: Local AI readiness + progressive run details | frontend types/components/routes | RG-2, RG-6 | yes | DONE |
+| RG-8 | Benchmark UX: model/config/dataset resource comparison | companion Performance Lab / experiment | RG-6 | yes | DEFERRED TO OWNER |
+| RG-9 | End-to-end validation and docs sync | tests/docs/packaging | RG-1..RG-7 | no | REAL_ENVIRONMENT PENDING |
 
 ## Current executable slice
 
-`RG-3 + RG-6 + RG-7`; RG-1/RG-2/RG-4/RG-5 are implemented
+`RG-9`; product implementation is complete for the RedactGuard-owned surface
 
 Acceptance:
 
@@ -76,7 +76,7 @@ Managed mode still uses a separate Korgis process. RedactGuard must not import/c
 
 - latency/tokens may sum only when semantics make that meaningful;
 - RAM peak is max over applicable request evidence, never sum;
-- CPU average is duration-weighted only when samples are comparable;
+- CPU average is duration-weighted by the actual Korgis CPU observation window when available, with a conservative legacy fallback only when sampling semantics are compatible;
 - cache hits increment cache counters but contribute no new inference resource cost;
 - mixed attribution quality is surfaced, not silently collapsed to exclusive attribution.
 
@@ -101,12 +101,13 @@ Managed mode still uses a separate Korgis process. RedactGuard must not import/c
 - branch: `feature/managed-korgis-evidence`
 - old `feature/korgis-runtime-integration` intentionally not reused because it is materially diverged from main.
 - confirmed: main already delegates inference to Korgis and has a typed `LLMInferenceResult`, but only consumes content/token usage and application latency.
-- deterministic evidence through compatibility/aggregation foundation passed on PR #8 before the managed-sidecar slice; latest managed-sidecar HEAD still requires fresh CI.
-- cross-repo wheel gate pins Korgis candidate `a9095d730ee99def7a03b20f7acc5b7a909c74e0`, builds its wheel in CI, installs it without dependencies in an isolated venv and verifies `korgis-request-evidence-v1`.
-- managed packaging strategy: a separate Korgis venv built from an explicitly supplied wheel + SHA-256; no Korgis package is imported by the RedactGuard backend, and models remain Korgis-owned external durable data.
-- external remains the configuration default until a released Korgis artifact contains the request-evidence contract and packaged E2E is green.
-- next discriminating action: validate the managed-sidecar/build slice, then add run/benchmark projections and packaged-runtime E2E.
+- PR #8 previously passed the complete Validate PR matrix at head `8306328529085efcd97deda6edabaa47220e343e` (run 52): backend, frontend, Rust/Tauri lifecycle, sidecar staging, packaging-script syntax and managed Korgis wheel contract were all PASS. Subsequent pin/provenance/release-wiring changes require fresh exact-head evidence.
+- canonical Korgis pin: `.engineering/korgis-runtime.json` -> `a9095d730ee99def7a03b20f7acc5b7a909c74e0`; Korgis itself passed release/FULL CI run 683 and Repository Health 375 on that exact commit.
+- managed packaging strategy: release workflow builds the pinned Korgis wheel, verifies `korgis-request-evidence-v1`, computes SHA-256 and packages it into a separate Korgis venv. No Korgis package is imported by the RedactGuard backend, and models remain Korgis-owned durable data.
+- packaged desktop defaults to managed mode; development/backend standalone defaults to external unless explicitly overridden.
+- RG-8 is intentionally deferred to the existing companion Performance Lab/experiment because current RedactGuard has no canonical benchmark-UI owner. Do not create a parallel benchmark surface here.
+- next discriminating action: obtain fresh exact-head PR validation, then run a packaged macOS managed-runtime E2E with a real supported model.
 
 ## Completion
 
-Complete only when runtime lifecycle, compatibility, evidence parsing/aggregation, cache semantics, UX, tests, docs and packaging agree. A running app or an existing branch alone is not completion.
+RedactGuard-owned implementation is complete when fresh exact-head automated validation is green. Integration/release completion still requires the declared packaged REAL_ENVIRONMENT managed-runtime E2E; benchmark comparison remains owned by the companion Performance Lab rather than this app.
