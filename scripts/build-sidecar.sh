@@ -9,6 +9,8 @@ RESOURCES_DIR="$TAURI_DIR/resources"
 
 PYTHON_VERSION="3.13.2"
 PBS_RELEASE="20250212"
+KORGIS_WHEEL="${KORGIS_WHEEL:-}"
+KORGIS_WHEEL_SHA256="${KORGIS_WHEEL_SHA256:-}"
 
 detect_platform() {
     local os arch
@@ -45,10 +47,14 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "  RedactGuard API Sidecar Build"
 echo "  Platform: $PLATFORM"
 echo "  Python: $PYTHON_VERSION"
-echo "  Korgis: external runtime (not bundled)"
+if [ -n "$KORGIS_WHEEL" ]; then
+    echo "  Korgis: managed runtime from pinned wheel"
+else
+    echo "  Korgis: external runtime (managed wheel not supplied)"
+fi
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-rm -rf "$RESOURCES_DIR/python" "$RESOURCES_DIR/backend" "$BINARIES_DIR"
+rm -rf "$RESOURCES_DIR/python" "$RESOURCES_DIR/backend" "$RESOURCES_DIR/korgis" "$BINARIES_DIR"
 mkdir -p "$RESOURCES_DIR" "$BINARIES_DIR"
 
 PYTHON_ARCHIVE="$RESOURCES_DIR/python-standalone.tar.gz"
@@ -72,6 +78,65 @@ fi
 "$VENV_PYTHON" -m pip install --upgrade pip --quiet
 "$VENV_PYTHON" -m pip install --no-cache-dir -r "$PROJECT_ROOT/anonimizer/requirements.txt"
 
+if [ -n "$KORGIS_WHEEL" ]; then
+    if [ ! -f "$KORGIS_WHEEL" ]; then
+        echo "❌ KORGIS_WHEEL does not exist: $KORGIS_WHEEL"
+        exit 1
+    fi
+
+    ACTUAL_KORGIS_SHA256="$("$PYTHON_BIN" - "$KORGIS_WHEEL" <<'PY'
+import hashlib
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+digest = hashlib.sha256()
+with path.open("rb") as fh:
+    for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+        digest.update(chunk)
+print(digest.hexdigest())
+PY
+)"
+
+    if [ -n "$KORGIS_WHEEL_SHA256" ] && [ "$ACTUAL_KORGIS_SHA256" != "$KORGIS_WHEEL_SHA256" ]; then
+        echo "❌ Korgis wheel checksum mismatch"
+        echo "   expected: $KORGIS_WHEEL_SHA256"
+        echo "   actual:   $ACTUAL_KORGIS_SHA256"
+        exit 1
+    fi
+
+    mkdir -p "$RESOURCES_DIR/korgis"
+    "$PYTHON_BIN" -m venv "$RESOURCES_DIR/korgis/venv"
+    if [[ "$PLATFORM" == *"windows"* ]]; then
+        KORGIS_PYTHON="$RESOURCES_DIR/korgis/venv/Scripts/python.exe"
+    else
+        KORGIS_PYTHON="$RESOURCES_DIR/korgis/venv/bin/python"
+    fi
+
+    "$KORGIS_PYTHON" -m pip install --upgrade pip --quiet
+    "$KORGIS_PYTHON" -m pip install --no-cache-dir "$KORGIS_WHEEL"
+
+    KORGIS_VERSION="$("$KORGIS_PYTHON" - <<'PY'
+from importlib.metadata import version
+print(version("local-llm-server"))
+PY
+)"
+
+    "$PYTHON_BIN" - "$RESOURCES_DIR/korgis/manifest.json" "$KORGIS_VERSION" "$ACTUAL_KORGIS_SHA256" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+target = Path(sys.argv[1])
+payload = {
+    "package": "local-llm-server",
+    "version": sys.argv[2],
+    "wheel_sha256": sys.argv[3],
+}
+target.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+PY
+fi
+
 mkdir -p "$RESOURCES_DIR/backend"
 cp -r "$PROJECT_ROOT/anonimizer/"* "$RESOURCES_DIR/backend/"
 cp "$PROJECT_ROOT/config.json" "$RESOURCES_DIR/backend/"
@@ -87,4 +152,8 @@ else
     chmod +x "$BINARIES_DIR/$SIDECAR_NAME"
 fi
 
-echo "✅ Sidecar build complete. Korgis remains a separately managed local runtime."
+if [ -n "$KORGIS_WHEEL" ]; then
+    echo "✅ Sidecar build complete with a separate managed Korgis runtime environment."
+else
+    echo "✅ Sidecar build complete. Korgis remains an external local runtime."
+fi
