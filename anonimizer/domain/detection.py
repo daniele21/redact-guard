@@ -117,3 +117,11 @@ class DetectionDiagnostics(BaseModel):
     parsed_items: int = 0
     resolved_items: int = 0
     unresolved_items: int = 0
+    inference_requests: int = 0
+    resource_evidence_requests: int = 0
+    peak_memory_bytes: int | None = None
+    peak_memory_delta_bytes: int | None = None
+    average_cpu_percent: float | None = None
+    peak_cpu_percent: float | None = None
+    resource_attribution_scopes: list[str] = Field(default_factory=list)
+    resource_attribution_qualities: list[str] = Field(default_factory=list)
