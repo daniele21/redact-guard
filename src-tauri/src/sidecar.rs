@@ -64,8 +64,9 @@ pub async fn start_backend(handle: &AppHandle) -> Result<(), String> {
     let model = env::var("KORGIS_MODEL").unwrap_or_else(|_| "nemotron-nano-4b".to_string());
 
     let korgis_base_url = match mode {
-        KorgisMode::External => env::var("KORGIS_BASE_URL")
-            .unwrap_or_else(|_| "http://127.0.0.1:1235/v1".to_string()),
+        KorgisMode::External => {
+            env::var("KORGIS_BASE_URL").unwrap_or_else(|_| "http://127.0.0.1:1235/v1".to_string())
+        }
         KorgisMode::Managed => {
             let port = portpicker::pick_unused_port().ok_or_else(|| {
                 "Could not allocate a loopback port for managed Korgis".to_string()
@@ -115,18 +116,13 @@ pub async fn start_backend(handle: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-async fn start_korgis_server(
-    handle: &AppHandle,
-    port: u16,
-    model: &str,
-) -> Result<(), String> {
+async fn start_korgis_server(handle: &AppHandle, port: u16, model: &str) -> Result<(), String> {
     let root = project_root(handle);
     let port_str = port.to_string();
 
     let command = if cfg!(debug_assertions) {
-        let python = env::var("KORGIS_PYTHON").map_err(|_| {
-            "Managed Korgis development mode requires KORGIS_PYTHON".to_string()
-        })?;
+        let python = env::var("KORGIS_PYTHON")
+            .map_err(|_| "Managed Korgis development mode requires KORGIS_PYTHON".to_string())?;
         handle
             .shell()
             .command(python)
@@ -247,11 +243,7 @@ async fn start_api_server(
     Ok(())
 }
 
-async fn wait_for_http_health(
-    url: &str,
-    timeout: Duration,
-    label: &str,
-) -> Result<(), String> {
+async fn wait_for_http_health(url: &str, timeout: Duration, label: &str) -> Result<(), String> {
     let client = reqwest::Client::new();
     let start = std::time::Instant::now();
 
