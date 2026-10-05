@@ -102,6 +102,7 @@ Managed mode still uses a separate Korgis process. RedactGuard must not import/c
 - old `feature/korgis-runtime-integration` intentionally not reused because it is materially diverged from main.
 - confirmed: main already delegates inference to Korgis and has a typed `LLMInferenceResult`, but only consumes content/token usage and application latency.
 - deterministic evidence through compatibility/aggregation foundation passed on PR #8 before the managed-sidecar slice; latest managed-sidecar HEAD still requires fresh CI.
+- cross-repo wheel gate pins Korgis candidate `eae6d63380cacd03e87c04ddd09f1825088c0149`, builds its wheel in CI, installs it without dependencies in an isolated venv and verifies `korgis-request-evidence-v1`.
 - managed packaging strategy: a separate Korgis venv built from an explicitly supplied wheel + SHA-256; no Korgis package is imported by the RedactGuard backend, and models remain Korgis-owned external durable data.
 - external remains the configuration default until a released Korgis artifact contains the request-evidence contract and packaged E2E is green.
 - next discriminating action: validate the managed-sidecar/build slice, then add run/benchmark projections and packaged-runtime E2E.
