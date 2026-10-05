@@ -115,6 +115,7 @@ class SummaryTests(unittest.TestCase):
                 average_cpu_percent=100.0,
                 peak_cpu_percent=150.0,
                 resource_cpu_sample_count=2,
+                resource_cpu_observation_ms=100.0,
                 resource_sampling_interval_ms=100,
                 resource_attribution_scopes=["korgis_process_tree"],
                 resource_attribution_qualities=["process_global"],
@@ -130,6 +131,7 @@ class SummaryTests(unittest.TestCase):
                 average_cpu_percent=200.0,
                 peak_cpu_percent=260.0,
                 resource_cpu_sample_count=6,
+                resource_cpu_observation_ms=900.0,
                 resource_sampling_interval_ms=100,
                 resource_attribution_scopes=["korgis_process_tree"],
                 resource_attribution_qualities=["process_global"],
@@ -144,8 +146,9 @@ class SummaryTests(unittest.TestCase):
         self.assertEqual(summary.resources.peak_memory_bytes, 700)
         self.assertEqual(summary.resources.peak_memory_delta_bytes, 300)
         self.assertEqual(summary.resources.peak_cpu_percent, 260.0)
-        self.assertEqual(summary.resources.average_cpu_percent, 175.0)
+        self.assertEqual(summary.resources.average_cpu_percent, 190.0)
         self.assertEqual(summary.resources.cpu_sample_count, 8)
+        self.assertEqual(summary.resources.cpu_observation_ms, 1000.0)
         self.assertEqual(
             summary.resources.attribution_qualities,
             ["process_global"],
