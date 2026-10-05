@@ -4,10 +4,19 @@ RedactGuard delegates **all local model runtime responsibilities** to Korgis. It
 
 ## Tested baseline
 
+Released/legacy baseline:
+
 - repository: `daniele21/korgis`
 - ref: `dev`
 - commit: `26a161dc0ef89a133c7a076d3a31544a274c1469`
 - runtime identity protocol: `local-llm-identity-v1`
+
+Integration candidate:
+
+- repository: `daniele21/korgis`
+- commit: `eae6d63380cacd03e87c04ddd09f1825088c0149`
+- request evidence protocol: `korgis-request-evidence-v1`
+- RedactGuard CI builds a wheel from this exact commit and verifies the packaged contract before managed-runtime integration is considered deterministic-ready.
 
 This revision is the compatibility baseline because it includes the recent local Qwen3.5 Q4_K_M registry additions used by the RedactGuard benchmark.
 
