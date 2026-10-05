@@ -189,6 +189,39 @@ gantt
 
 ---
 
+
+
+## Managed Korgis runtime + request evidence slice — 2026-10
+
+Goal: turn the existing Korgis inference dependency into a managed runtime boundary with request-level performance/resource evidence.
+
+### Sequencing
+
+| Slice | Outcome | Dependency |
+|---|---|---|
+| K1 | Typed `korgis-request-evidence-v1` parsing in RedactGuard | Korgis contract |
+| K2 | `KorgisRuntimeAdapter` for health/models/identity/status/resources/inference | K1 can run in parallel |
+| K3 | Managed vs external runtime mode | K2 |
+| K4 | Compatibility/capability gate and approved-model readiness | K2 |
+| K5 | Preserve inference/cache evidence through PII detection | K1 |
+| K6 | Aggregate request -> page -> document/run metrics | K5 |
+| K7 | Progressive Local AI/run-details UX | K4, K6 |
+| K8 | Benchmark comparison across quality, latency, throughput, peak RAM and CPU | K6 |
+| K9 | Packaging/E2E/docs sync | K3..K8 |
+
+### Resource-evidence rules
+
+- Korgis is the measurement authority; RedactGuard does not sample CPU/RAM independently.
+- Missing or unknown evidence stays unavailable.
+- Cache hits are not fresh inference cost.
+- Peak RAM across requests is a maximum, not a sum.
+- CPU averages are combined only with compatible duration/attribution semantics.
+- Process-global/shared attribution remains explicitly qualified.
+- No document or PII content enters resource telemetry.
+
+Detailed coordination: `docs/workstreams/managed-korgis-runtime-and-evidence.md`.
+
+
 ## Cross-cutting Concerns
 
 ### Documentation updates per phase
