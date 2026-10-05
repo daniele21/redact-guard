@@ -65,6 +65,16 @@ def main() -> int:
         "managed Korgis bundle manifest must retain the source commit",
     )
     require(
+        "REDACTGUARD_BUILD_TARGET" in build,
+        "release workflow must pass the requested Tauri target to sidecar packaging",
+    )
+    require(
+        "REDACTGUARD_BUILD_TARGET" in packaging
+        and 'TAURI_TARGET=$(get_tauri_target)' in packaging
+        and 'does not match requested bundle target' in packaging,
+        "sidecar packaging must fail when the build host target differs from the requested bundle target",
+    )
+    require(
         'if cfg!(debug_assertions)' in tauri
         and '"external"' in tauri
         and '"managed"' in tauri,

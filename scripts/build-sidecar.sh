@@ -12,6 +12,7 @@ PBS_RELEASE="20250212"
 KORGIS_WHEEL="${KORGIS_WHEEL:-}"
 KORGIS_WHEEL_SHA256="${KORGIS_WHEEL_SHA256:-}"
 KORGIS_SOURCE_COMMIT="${KORGIS_SOURCE_COMMIT:-}"
+REDACTGUARD_BUILD_TARGET="${REDACTGUARD_BUILD_TARGET:-}"
 
 detect_platform() {
     local os arch
@@ -42,12 +43,19 @@ get_tauri_target() {
 
 PLATFORM=$(detect_platform)
 TAURI_TARGET=$(get_tauri_target)
+
+if [ -n "$REDACTGUARD_BUILD_TARGET" ] && [ "$TAURI_TARGET" != "$REDACTGUARD_BUILD_TARGET" ]; then
+    echo "❌ Build host target $TAURI_TARGET does not match requested bundle target $REDACTGUARD_BUILD_TARGET"
+    exit 1
+fi
+
 PBS_URL="https://github.com/indygreg/python-build-standalone/releases/download/${PBS_RELEASE}/cpython-${PYTHON_VERSION}+${PBS_RELEASE}-${PLATFORM}-install_only_stripped.tar.gz"
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "  RedactGuard API Sidecar Build"
 echo "  Platform: $PLATFORM"
 echo "  Python: $PYTHON_VERSION"
+echo "  Tauri target: $TAURI_TARGET"
 if [ -n "$KORGIS_WHEEL" ]; then
     echo "  Korgis: managed runtime from pinned wheel"
 else
