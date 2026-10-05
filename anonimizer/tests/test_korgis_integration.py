@@ -10,7 +10,7 @@ if str(BACKEND_DIR) not in sys.path:
 
 from config import config
 from services.pii_detector import call_local_llm
-from services.korgis_client import KorgisRuntimeAdapter
+from services.korgis_client import KorgisCompatibility, KorgisRuntimeAdapter
 from api import routes_health
 
 
@@ -90,17 +90,16 @@ class KorgisInferenceContractTests(unittest.TestCase):
 
 class KorgisHealthContractTests(unittest.TestCase):
     def test_health_reports_online_when_configured_model_is_resident(self):
-        def fake_get(url, timeout=2.0):
-            if url.endswith("/models"):
-                return {"data": [{"id": config.korgis_model}]}
-            if url.endswith("/runtime/identity"):
-                return {
-                    "protocol_version": "local-llm-identity-v1",
-                    "models": {config.korgis_model: {"model_id": "test"}},
-                }
-            raise AssertionError(url)
-
-        with patch("api.routes_health._get_json", side_effect=fake_get):
+        compatibility = KorgisCompatibility(
+            identity_protocol="local-llm-identity-v1",
+            identity_compatible=True,
+            request_evidence_supported=True,
+            model_resident=True,
+        )
+        with patch(
+            "api.routes_health.KorgisRuntimeAdapter.compatibility",
+            return_value=compatibility,
+        ):
             health = routes_health.health_check()
 
         self.assertEqual(health.llm_status, "online")
@@ -109,11 +108,20 @@ class KorgisHealthContractTests(unittest.TestCase):
             health.korgis_protocol_version,
             "local-llm-identity-v1",
         )
+        self.assertEqual(health.korgis_compatibility, "compatible")
+        self.assertTrue(health.korgis_request_evidence_supported)
+        self.assertEqual(health.korgis_mode, config.korgis_mode)
 
     def test_health_distinguishes_unreachable_korgis(self):
-        with patch("api.routes_health._get_json", side_effect=OSError("offline")):
+        with patch(
+            "api.routes_health.KorgisRuntimeAdapter.compatibility",
+            side_effect=OSError("offline"),
+        ):
             health = routes_health.health_check()
         self.assertEqual(health.llm_status, "offline")
+        self.assertIsNone(health.korgis_compatibility)
+
+
 
 
 if __name__ == "__main__":
