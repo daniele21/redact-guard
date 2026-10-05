@@ -58,6 +58,8 @@ def _evidence(
             ),
             attribution_scope=scope,
             attribution_quality=quality,
+            memory_source="ps_process_tree_cpu_time_delta_excluding_sampler",
+            cpu_source="ps_process_tree_cpu_time_delta_excluding_sampler",
         ),
     )
 
@@ -95,6 +97,14 @@ class ResourceEvidenceAggregationTests(unittest.TestCase):
         self.assertEqual(summary.peak_cpu_percent, 260.0)
         self.assertEqual(summary.average_cpu_percent, 190.0)
         self.assertEqual(summary.cpu_observation_ms, 1000.0)
+        self.assertEqual(
+            summary.memory_sources,
+            ("ps_process_tree_cpu_time_delta_excluding_sampler",),
+        )
+        self.assertEqual(
+            summary.cpu_sources,
+            ("ps_process_tree_cpu_time_delta_excluding_sampler",),
+        )
         self.assertEqual(
             summary.attribution_qualities,
             ("process_global",),
