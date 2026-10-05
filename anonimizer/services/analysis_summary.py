@@ -88,6 +88,7 @@ def _document_resource_summary(session: DocumentSession) -> DocumentResourceSumm
     average_cpu = None
     cpu_sample_count = None
     sampling_interval = None
+    cpu_observation_ms = None
     if len(cpu_entries) == len(evidence_diagnostics) and cpu_entries:
         compatibility = {
             (
@@ -102,13 +103,36 @@ def _document_resource_summary(session: DocumentSession) -> DocumentResourceSumm
                 item.resource_cpu_sample_count or 0
                 for item in cpu_entries
             )
-            if cpu_sample_count > 0:
+            weights_ms = [
+                (
+                    item.resource_cpu_observation_ms
+                    if (
+                        item.resource_cpu_observation_ms is not None
+                        and item.resource_cpu_observation_ms > 0
+                    )
+                    else float(
+                        (item.resource_cpu_sample_count or 0)
+                        * (item.resource_sampling_interval_ms or 0)
+                    )
+                )
+                for item in cpu_entries
+            ]
+            total_weight_ms = sum(weights_ms)
+            if cpu_sample_count > 0 and total_weight_ms > 0:
                 average_cpu = sum(
-                    (item.average_cpu_percent or 0.0)
-                    * (item.resource_cpu_sample_count or 0)
-                    for item in cpu_entries
-                ) / cpu_sample_count
+                    (item.average_cpu_percent or 0.0) * weight_ms
+                    for item, weight_ms in zip(cpu_entries, weights_ms)
+                ) / total_weight_ms
                 sampling_interval = next(iter(compatibility))[0]
+                if all(
+                    item.resource_cpu_observation_ms is not None
+                    and item.resource_cpu_observation_ms > 0
+                    for item in cpu_entries
+                ):
+                    cpu_observation_ms = sum(
+                        item.resource_cpu_observation_ms or 0.0
+                        for item in cpu_entries
+                    )
 
     scopes = sorted({
         scope
@@ -131,6 +155,7 @@ def _document_resource_summary(session: DocumentSession) -> DocumentResourceSumm
         peak_cpu_percent=max(peak_cpu_values) if peak_cpu_values else None,
         cpu_sample_count=cpu_sample_count,
         sampling_interval_ms=sampling_interval,
+        cpu_observation_ms=cpu_observation_ms,
         attribution_scopes=scopes,
         attribution_qualities=qualities,
     )
