@@ -264,6 +264,8 @@ def _parse_resource_usage(payload: dict[str, Any]) -> KorgisResourceUsage:
     sampling = sampling if isinstance(sampling, dict) else {}
     attribution = payload.get("attribution")
     attribution = attribution if isinstance(attribution, dict) else {}
+    sources = payload.get("sources")
+    sources = sources if isinstance(sources, dict) else {}
 
     return KorgisResourceUsage(
         snapshot_id=_optional_str(payload.get("snapshot_id")),
@@ -281,9 +283,14 @@ def _parse_resource_usage(payload: dict[str, Any]) -> KorgisResourceUsage:
             interval_ms=_optional_int(sampling.get("interval_ms")),
             sample_count=_optional_int(sampling.get("sample_count")),
             errors=_optional_int(sampling.get("errors")),
+            cpu_observation_ms=_optional_float(
+                sampling.get("cpu_observation_ms")
+            ),
         ),
         attribution_scope=_optional_str(attribution.get("scope")),
         attribution_quality=_optional_str(attribution.get("quality")),
+        memory_source=_optional_str(sources.get("memory")),
+        cpu_source=_optional_str(sources.get("cpu")),
     )
 
 
