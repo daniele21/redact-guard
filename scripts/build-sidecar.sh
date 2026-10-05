@@ -11,6 +11,7 @@ PYTHON_VERSION="3.13.2"
 PBS_RELEASE="20250212"
 KORGIS_WHEEL="${KORGIS_WHEEL:-}"
 KORGIS_WHEEL_SHA256="${KORGIS_WHEEL_SHA256:-}"
+KORGIS_SOURCE_COMMIT="${KORGIS_SOURCE_COMMIT:-}"
 
 detect_platform() {
     local os arch
@@ -126,7 +127,7 @@ print(version("local-llm-server"))
 PY
 )"
 
-    "$PYTHON_BIN" - "$RESOURCES_DIR/korgis/manifest.json" "$KORGIS_VERSION" "$ACTUAL_KORGIS_SHA256" <<'PY'
+    "$PYTHON_BIN" - "$RESOURCES_DIR/korgis/manifest.json" "$KORGIS_VERSION" "$ACTUAL_KORGIS_SHA256" "$KORGIS_SOURCE_COMMIT" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -136,6 +137,7 @@ payload = {
     "package": "local-llm-server",
     "version": sys.argv[2],
     "wheel_sha256": sys.argv[3],
+    "source_commit": sys.argv[4] or None,
 }
 target.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 PY
