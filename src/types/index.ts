@@ -166,6 +166,9 @@ export interface HealthResponse {
   status: string;
   llm_status: 'online' | 'offline' | 'model_not_resident';
   model: string;
+  korgis_mode: 'external' | 'managed';
   korgis_protocol_version: string | null;
+  korgis_compatibility: 'compatible' | 'legacy_compatible' | 'identity_incompatible' | null;
+  korgis_request_evidence_supported: boolean;
   cache_stats: Record<string, any>;
 }
