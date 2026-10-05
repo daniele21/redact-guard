@@ -123,5 +123,7 @@ class DetectionDiagnostics(BaseModel):
     peak_memory_delta_bytes: int | None = None
     average_cpu_percent: float | None = None
     peak_cpu_percent: float | None = None
+    resource_cpu_sample_count: int | None = None
+    resource_sampling_interval_ms: int | None = None
     resource_attribution_scopes: list[str] = Field(default_factory=list)
     resource_attribution_qualities: list[str] = Field(default_factory=list)
