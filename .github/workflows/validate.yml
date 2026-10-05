@@ -60,6 +60,12 @@ jobs:
           cargo fmt --check --manifest-path src-tauri/Cargo.toml
       - name: Test lightweight sidecar launcher
         run: cargo test --manifest-path sidecar/Cargo.toml
+      - name: Stage sidecar binary for Tauri
+        run: |
+          cargo build --manifest-path sidecar/Cargo.toml
+          mkdir -p src-tauri/binaries
+          cp sidecar/target/debug/redactguard-server \
+            src-tauri/binaries/redactguard-server-x86_64-unknown-linux-gnu
       - name: Check Tauri managed runtime orchestration
         run: cargo check --manifest-path src-tauri/Cargo.toml
       - name: Check packaging script syntax
