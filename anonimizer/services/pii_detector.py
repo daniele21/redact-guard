@@ -188,6 +188,8 @@ def detect_pii_for_page(
         peak_memory_delta_bytes=resource_summary.peak_memory_delta_bytes,
         average_cpu_percent=resource_summary.average_cpu_percent,
         peak_cpu_percent=resource_summary.peak_cpu_percent,
+        resource_cpu_sample_count=resource_summary.cpu_sample_count,
+        resource_sampling_interval_ms=resource_summary.sampling_interval_ms,
         resource_attribution_scopes=list(resource_summary.attribution_scopes),
         resource_attribution_qualities=list(resource_summary.attribution_qualities),
     )
