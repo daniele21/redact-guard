@@ -20,6 +20,7 @@ class ResourceEvidenceSummary:
     average_cpu_percent: float | None = None
     cpu_sample_count: int | None = None
     sampling_interval_ms: int | None = None
+    cpu_observation_ms: float | None = None
     attribution_scopes: tuple[str, ...] = ()
     attribution_qualities: tuple[str, ...] = ()
 
@@ -68,7 +69,12 @@ class ResourceEvidenceAccumulator:
             if item.attribution_quality
         }))
 
-        average_cpu, cpu_sample_count, sampling_interval = _compatible_cpu_aggregate(resources)
+        (
+            average_cpu,
+            cpu_sample_count,
+            sampling_interval,
+            cpu_observation_ms,
+        ) = _compatible_cpu_aggregate(resources)
 
         return ResourceEvidenceSummary(
             inference_requests=self.inference_requests,
@@ -79,14 +85,17 @@ class ResourceEvidenceAccumulator:
             average_cpu_percent=average_cpu,
             cpu_sample_count=cpu_sample_count,
             sampling_interval_ms=sampling_interval,
+            cpu_observation_ms=cpu_observation_ms,
             attribution_scopes=scopes,
             attribution_qualities=qualities,
         )
 
 
-def _compatible_cpu_aggregate(resources) -> tuple[float | None, int | None, int | None]:
-    """Combine request CPU averages only when sampling semantics match."""
-    values = []
+def _compatible_cpu_aggregate(
+    resources,
+) -> tuple[float | None, int | None, int | None, float | None]:
+    """Combine CPU averages only when sampling and attribution semantics match."""
+    entries = []
     compatibility_keys = set()
     for item in resources:
         average = item.cpu.average_percent
@@ -94,22 +103,41 @@ def _compatible_cpu_aggregate(resources) -> tuple[float | None, int | None, int 
         interval = item.sampling.interval_ms
         if average is None or count is None or count <= 0 or interval is None:
             continue
+        observed_ms = item.sampling.cpu_observation_ms
+        weight_ms = (
+            observed_ms
+            if observed_ms is not None and observed_ms > 0
+            else float(count * interval)
+        )
         compatibility_keys.add(
             (interval, item.attribution_scope, item.attribution_quality)
         )
-        values.append((average, count))
+        entries.append((average, count, weight_ms, observed_ms))
 
-    if not values or len(values) != len(resources):
-        return None, None, None
+    if not entries or len(entries) != len(resources):
+        return None, None, None, None
     if len(compatibility_keys) != 1:
-        return None, None, None
+        return None, None, None, None
 
-    total_samples = sum(count for _, count in values)
-    if total_samples <= 0:
-        return None, None, None
+    total_weight_ms = sum(weight_ms for _, _, weight_ms, _ in entries)
+    total_samples = sum(count for _, count, _, _ in entries)
+    if total_weight_ms <= 0 or total_samples <= 0:
+        return None, None, None, None
+
     interval = next(iter(compatibility_keys))[0]
-    average = sum(value * count for value, count in values) / total_samples
-    return average, total_samples, interval
+    average = (
+        sum(value * weight_ms for value, _, weight_ms, _ in entries)
+        / total_weight_ms
+    )
+    exact_observation_ms = (
+        sum(float(observed_ms) for _, _, _, observed_ms in entries)
+        if all(
+            observed_ms is not None and observed_ms > 0
+            for _, _, _, observed_ms in entries
+        )
+        else None
+    )
+    return average, total_samples, interval, exact_observation_ms
 
 
 def _max_optional(values) -> int | None:
