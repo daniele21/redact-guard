@@ -73,6 +73,7 @@ class KorgisSamplingInfo:
     interval_ms: int | None = None
     sample_count: int | None = None
     errors: int | None = None
+    cpu_observation_ms: float | None = None
 
 
 @dataclass(frozen=True)
@@ -83,6 +84,8 @@ class KorgisResourceUsage:
     sampling: KorgisSamplingInfo = field(default_factory=KorgisSamplingInfo)
     attribution_scope: str | None = None
     attribution_quality: str | None = None
+    memory_source: str | None = None
+    cpu_source: str | None = None
 
 
 @dataclass(frozen=True)
@@ -124,6 +127,8 @@ class DetectionDiagnostics(BaseModel):
     average_cpu_percent: float | None = None
     peak_cpu_percent: float | None = None
     resource_cpu_sample_count: int | None = None
+    resource_cpu_observation_ms: float | None = None
     resource_sampling_interval_ms: int | None = None
+    resource_cpu_sources: list[str] = Field(default_factory=list)
     resource_attribution_scopes: list[str] = Field(default_factory=list)
     resource_attribution_qualities: list[str] = Field(default_factory=list)
