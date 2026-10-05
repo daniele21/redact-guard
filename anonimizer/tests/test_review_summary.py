@@ -117,6 +117,8 @@ class SummaryTests(unittest.TestCase):
                 resource_cpu_sample_count=2,
                 resource_cpu_observation_ms=100.0,
                 resource_sampling_interval_ms=100,
+                resource_memory_sources=["ps_process_tree_cpu_time_delta_excluding_sampler"],
+                resource_cpu_sources=["ps_process_tree_cpu_time_delta_excluding_sampler"],
                 resource_attribution_scopes=["korgis_process_tree"],
                 resource_attribution_qualities=["process_global"],
             ),
@@ -133,6 +135,8 @@ class SummaryTests(unittest.TestCase):
                 resource_cpu_sample_count=6,
                 resource_cpu_observation_ms=900.0,
                 resource_sampling_interval_ms=100,
+                resource_memory_sources=["ps_process_tree_cpu_time_delta_excluding_sampler"],
+                resource_cpu_sources=["ps_process_tree_cpu_time_delta_excluding_sampler"],
                 resource_attribution_scopes=["korgis_process_tree"],
                 resource_attribution_qualities=["process_global"],
             ),
@@ -149,6 +153,10 @@ class SummaryTests(unittest.TestCase):
         self.assertEqual(summary.resources.average_cpu_percent, 190.0)
         self.assertEqual(summary.resources.cpu_sample_count, 8)
         self.assertEqual(summary.resources.cpu_observation_ms, 1000.0)
+        self.assertEqual(
+            summary.resources.cpu_sources,
+            ["ps_process_tree_cpu_time_delta_excluding_sampler"],
+        )
         self.assertEqual(
             summary.resources.attribution_qualities,
             ["process_global"],
