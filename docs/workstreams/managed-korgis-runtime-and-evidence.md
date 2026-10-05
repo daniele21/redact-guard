@@ -36,19 +36,19 @@ RedactGuard owns PII policy/prompts, document processing, deterministic span res
 
 | ID | Work | Owns/writes | Depends on | Parallel | State |
 | --- | --- | --- | --- | --- | --- |
-| RG-1 | Add typed Korgis request-evidence contract and parse additive response fields | `domain/detection.py`, `services/korgis_client.py`, tests | — | yes | ACTIVE |
-| RG-2 | Evolve Korgis client into runtime adapter for health/identity/models/status/resources | runtime integration service + tests | — | yes | READY |
-| RG-3 | Add managed/external runtime mode and sidecar lifecycle | config/sidecar/Tauri startup | RG-2 | yes | BLOCKED |
-| RG-4 | Add Korgis compatibility/capability gate | health/runtime contract | RG-2 | yes | BLOCKED |
-| RG-5 | Preserve inference/cache evidence semantics through PII detection | detector/cache diagnostics | RG-1 | yes | BLOCKED |
-| RG-6 | Aggregate request -> chunk/page -> document/run evidence | domain/service aggregator + tests | RG-1, RG-5 | yes | BLOCKED |
-| RG-7 | Product UX: Local AI readiness + progressive run details | frontend types/components/routes | RG-2, RG-6 | yes | BLOCKED |
-| RG-8 | Benchmark UX: model/config/dataset resource comparison | benchmark UI/data projections | RG-6 | yes | BLOCKED |
+| RG-1 | Add typed Korgis request-evidence contract and parse additive response fields | `domain/detection.py`, `services/korgis_client.py`, tests | — | yes | DONE |
+| RG-2 | Evolve Korgis client into runtime adapter for health/identity/models/status/resources | runtime integration service + tests | — | yes | DONE |
+| RG-3 | Add managed/external runtime mode and sidecar lifecycle | config/sidecar/Tauri startup | RG-2 | yes | ACTIVE |
+| RG-4 | Add Korgis compatibility/capability gate | health/runtime contract | RG-2 | yes | DONE |
+| RG-5 | Preserve inference/cache evidence semantics through PII detection | detector/cache diagnostics | RG-1 | yes | DONE |
+| RG-6 | Aggregate request -> chunk/page -> document/run evidence | domain/service aggregator + tests | RG-1, RG-5 | yes | ACTIVE |
+| RG-7 | Product UX: Local AI readiness + progressive run details | frontend types/components/routes | RG-2, RG-6 | yes | ACTIVE |
+| RG-8 | Benchmark UX: model/config/dataset resource comparison | benchmark UI/data projections | RG-6 | yes | READY |
 | RG-9 | End-to-end validation and docs sync | tests/docs/packaging | RG-1..RG-8 | no | BLOCKED |
 
 ## Current executable slice
 
-`RG-1 + RG-2 contract foundation`
+`RG-3 + RG-6 + RG-7`; RG-1/RG-2/RG-4/RG-5 are implemented
 
 Acceptance:
 
@@ -101,7 +101,10 @@ Managed mode still uses a separate Korgis process. RedactGuard must not import/c
 - branch: `feature/managed-korgis-evidence`
 - old `feature/korgis-runtime-integration` intentionally not reused because it is materially diverged from main.
 - confirmed: main already delegates inference to Korgis and has a typed `LLMInferenceResult`, but only consumes content/token usage and application latency.
-- next discriminating action: implement RG-1 while Korgis request telemetry evolves in parallel.
+- deterministic evidence through compatibility/aggregation foundation passed on PR #8 before the managed-sidecar slice; latest managed-sidecar HEAD still requires fresh CI.
+- managed packaging strategy: a separate Korgis venv built from an explicitly supplied wheel + SHA-256; no Korgis package is imported by the RedactGuard backend, and models remain Korgis-owned external durable data.
+- external remains the configuration default until a released Korgis artifact contains the request-evidence contract and packaged E2E is green.
+- next discriminating action: validate the managed-sidecar/build slice, then add run/benchmark projections and packaged-runtime E2E.
 
 ## Completion
 
