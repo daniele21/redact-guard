@@ -79,6 +79,10 @@ fi
 "$VENV_PYTHON" -m pip install --no-cache-dir -r "$PROJECT_ROOT/anonimizer/requirements.txt"
 
 if [ -n "$KORGIS_WHEEL" ]; then
+    if [ -z "$KORGIS_WHEEL_SHA256" ]; then
+        echo "❌ KORGIS_WHEEL_SHA256 is required when packaging managed Korgis"
+        exit 1
+    fi
     if [ ! -f "$KORGIS_WHEEL" ]; then
         echo "❌ KORGIS_WHEEL does not exist: $KORGIS_WHEEL"
         exit 1
@@ -98,7 +102,7 @@ print(digest.hexdigest())
 PY
 )"
 
-    if [ -n "$KORGIS_WHEEL_SHA256" ] && [ "$ACTUAL_KORGIS_SHA256" != "$KORGIS_WHEEL_SHA256" ]; then
+    if [ "$ACTUAL_KORGIS_SHA256" != "$KORGIS_WHEEL_SHA256" ]; then
         echo "❌ Korgis wheel checksum mismatch"
         echo "   expected: $KORGIS_WHEEL_SHA256"
         echo "   actual:   $ACTUAL_KORGIS_SHA256"
