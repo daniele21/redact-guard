@@ -62,9 +62,7 @@ fn run_korgis(args: &[String]) -> ExitCode {
         Some(path) => path,
         None => {
             eprintln!("ERROR: Cannot locate the managed Korgis Python environment.");
-            eprintln!(
-                "  Provide KORGIS_PYTHON for development or package resources/korgis/venv."
-            );
+            eprintln!("  Provide KORGIS_PYTHON for development or package resources/korgis/venv.");
             return ExitCode::FAILURE;
         }
     };
@@ -108,12 +106,7 @@ fn resolve_korgis_python(exe_dir: &Path) -> Option<PathBuf> {
 fn api_production_candidates(exe_dir: &Path) -> Vec<(PathBuf, PathBuf)> {
     resource_roots(exe_dir)
         .into_iter()
-        .map(|resources| {
-            (
-                resources.join(python_venv_bin()),
-                resources.join("backend"),
-            )
-        })
+        .map(|resources| (resources.join(python_venv_bin()), resources.join("backend")))
         .collect()
 }
 
