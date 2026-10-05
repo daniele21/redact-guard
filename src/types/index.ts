@@ -181,7 +181,7 @@ export interface ProfileDetail {
 
 export interface HealthResponse {
   status: string;
-  llm_status: 'online' | 'offline' | 'model_not_resident';
+  llm_status: 'online' | 'offline' | 'model_not_resident' | 'runtime_incompatible';
   model: string;
   korgis_mode: 'external' | 'managed';
   korgis_protocol_version: string | null;
