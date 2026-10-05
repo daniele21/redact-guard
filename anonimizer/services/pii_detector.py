@@ -191,6 +191,8 @@ def detect_pii_for_page(
         resource_cpu_sample_count=resource_summary.cpu_sample_count,
         resource_cpu_observation_ms=resource_summary.cpu_observation_ms,
         resource_sampling_interval_ms=resource_summary.sampling_interval_ms,
+        resource_memory_sources=list(resource_summary.memory_sources),
+        resource_cpu_sources=list(resource_summary.cpu_sources),
         resource_attribution_scopes=list(resource_summary.attribution_scopes),
         resource_attribution_qualities=list(resource_summary.attribution_qualities),
     )
