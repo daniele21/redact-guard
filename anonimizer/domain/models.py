@@ -148,6 +148,8 @@ class DocumentResourceSummary(BaseModel):
     cpu_sample_count: int | None = None
     sampling_interval_ms: int | None = None
     cpu_observation_ms: float | None = None
+    memory_sources: list[str] = Field(default_factory=list)
+    cpu_sources: list[str] = Field(default_factory=list)
     attribution_scopes: list[str] = Field(default_factory=list)
     attribution_qualities: list[str] = Field(default_factory=list)
 
