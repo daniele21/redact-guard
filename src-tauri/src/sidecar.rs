@@ -214,6 +214,7 @@ async fn start_api_server(
             .args(["api", "--port", &port_str])
             .env("KORGIS_MODE", mode.as_str())
             .env("KORGIS_BASE_URL", korgis_base_url)
+            .env("KORGIS_MODEL", model)
     };
 
     let (mut rx, child) = sidecar_cmd
