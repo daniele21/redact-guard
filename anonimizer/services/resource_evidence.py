@@ -21,6 +21,8 @@ class ResourceEvidenceSummary:
     cpu_sample_count: int | None = None
     sampling_interval_ms: int | None = None
     cpu_observation_ms: float | None = None
+    memory_sources: tuple[str, ...] = ()
+    cpu_sources: tuple[str, ...] = ()
     attribution_scopes: tuple[str, ...] = ()
     attribution_qualities: tuple[str, ...] = ()
 
@@ -58,6 +60,16 @@ class ResourceEvidenceAccumulator:
             item.cpu.peak_percent for item in resources
         )
 
+        memory_sources = tuple(sorted({
+            item.memory_source
+            for item in resources
+            if item.memory_source
+        }))
+        cpu_sources = tuple(sorted({
+            item.cpu_source
+            for item in resources
+            if item.cpu_source
+        }))
         scopes = tuple(sorted({
             item.attribution_scope
             for item in resources
@@ -86,6 +98,8 @@ class ResourceEvidenceAccumulator:
             cpu_sample_count=cpu_sample_count,
             sampling_interval_ms=sampling_interval,
             cpu_observation_ms=cpu_observation_ms,
+            memory_sources=memory_sources,
+            cpu_sources=cpu_sources,
             attribution_scopes=scopes,
             attribution_qualities=qualities,
         )
