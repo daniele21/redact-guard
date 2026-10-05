@@ -18,6 +18,8 @@ class ResourceEvidenceSummary:
     peak_memory_delta_bytes: int | None = None
     peak_cpu_percent: float | None = None
     average_cpu_percent: float | None = None
+    cpu_sample_count: int | None = None
+    sampling_interval_ms: int | None = None
     attribution_scopes: tuple[str, ...] = ()
     attribution_qualities: tuple[str, ...] = ()
 
@@ -66,25 +68,24 @@ class ResourceEvidenceAccumulator:
             if item.attribution_quality
         }))
 
+        average_cpu, cpu_sample_count, sampling_interval = _compatible_cpu_aggregate(resources)
+
         return ResourceEvidenceSummary(
             inference_requests=self.inference_requests,
             evidence_requests=len(resources),
             peak_memory_bytes=peak_memory,
             peak_memory_delta_bytes=peak_delta,
             peak_cpu_percent=peak_cpu,
-            average_cpu_percent=_compatible_average_cpu(resources),
+            average_cpu_percent=average_cpu,
+            cpu_sample_count=cpu_sample_count,
+            sampling_interval_ms=sampling_interval,
             attribution_scopes=scopes,
             attribution_qualities=qualities,
         )
 
 
-def _compatible_average_cpu(resources) -> float | None:
-    """Return a sample-weighted CPU average only for compatible samplers.
-
-    Multiple request averages are combined only when sampling interval, scope and
-    attribution quality agree and each request has a positive sample count.
-    Otherwise the aggregate remains unavailable.
-    """
+def _compatible_cpu_aggregate(resources) -> tuple[float | None, int | None, int | None]:
+    """Combine request CPU averages only when sampling semantics match."""
     values = []
     compatibility_keys = set()
     for item in resources:
@@ -99,14 +100,16 @@ def _compatible_average_cpu(resources) -> float | None:
         values.append((average, count))
 
     if not values or len(values) != len(resources):
-        return None
+        return None, None, None
     if len(compatibility_keys) != 1:
-        return None
+        return None, None, None
 
     total_samples = sum(count for _, count in values)
     if total_samples <= 0:
-        return None
-    return sum(average * count for average, count in values) / total_samples
+        return None, None, None
+    interval = next(iter(compatibility_keys))[0]
+    average = sum(value * count for value, count in values) / total_samples
+    return average, total_samples, interval
 
 
 def _max_optional(values) -> int | None:
