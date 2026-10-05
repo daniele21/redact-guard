@@ -87,6 +87,7 @@ Managed mode still uses a separate Korgis process. RedactGuard must not import/c
 - Rust formatting/check when sidecar lifecycle changes;
 - CI is the deterministic fallback because the current agent environment cannot resolve GitHub/package network dependencies locally;
 - packaged runtime behavior is validated separately from deterministic parsing/aggregation contracts;
+- PR validation builds an ad-hoc signed Apple Silicon `.app` on `macos-latest`, verifies its managed-runtime layout and retains it as a bounded artifact;
 - `scripts/run-managed-package-e2e.py` is the canonical representative macOS runner and retains only bounded privacy-safe evidence.
 
 ## Documentation destinations

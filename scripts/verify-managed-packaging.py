@@ -69,6 +69,14 @@ def main() -> int:
         "release workflow must pass the requested Tauri target to sidecar packaging",
     )
     require(
+        "managed-package-macos:" in validate
+        and "runs-on: macos-latest" in validate
+        and "pnpm tauri build --bundles app --target aarch64-apple-darwin" in validate
+        and 'APPLE_SIGNING_IDENTITY: "-"' in validate
+        and "actions/upload-artifact@v4" in validate,
+        "PR validation must build and retain an ad-hoc signed Apple Silicon app bundle",
+    )
+    require(
         "REDACTGUARD_BUILD_TARGET" in packaging
         and 'TAURI_TARGET=$(get_tauri_target)' in packaging
         and 'does not match requested bundle target' in packaging,
