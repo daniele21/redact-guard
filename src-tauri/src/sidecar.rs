@@ -19,8 +19,13 @@ enum KorgisMode {
 
 impl KorgisMode {
     fn from_env() -> Result<Self, String> {
+        let default_mode = if cfg!(debug_assertions) {
+            "external"
+        } else {
+            "managed"
+        };
         match env::var("KORGIS_MODE")
-            .unwrap_or_else(|_| "external".to_string())
+            .unwrap_or_else(|_| default_mode.to_string())
             .trim()
             .to_ascii_lowercase()
             .as_str()
