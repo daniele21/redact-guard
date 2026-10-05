@@ -96,6 +96,20 @@ export type DocumentAnalysisStatus =
   | 'needs_attention'
   | 'failed';
 
+export interface DocumentResourceSummary {
+  inference_requests: number;
+  cache_hits: number;
+  evidence_requests: number;
+  peak_memory_bytes: number | null;
+  peak_memory_delta_bytes: number | null;
+  average_cpu_percent: number | null;
+  peak_cpu_percent: number | null;
+  cpu_sample_count: number | null;
+  sampling_interval_ms: number | null;
+  attribution_scopes: string[];
+  attribution_qualities: string[];
+}
+
 export interface DocumentAnalysisSummary {
   document_id: string;
   filename: string;
@@ -115,6 +129,7 @@ export interface DocumentAnalysisSummary {
   page_status: Record<string, string>;
   page_errors: Record<string, string>;
   entities: SensitiveEntitySummary[];
+  resources: DocumentResourceSummary;
   local_processing: boolean;
 }
 
