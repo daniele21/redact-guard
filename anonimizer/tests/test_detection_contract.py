@@ -12,6 +12,11 @@ from domain.detection import (
     DETECTION_CONTRACT_VERSION,
     DetectionContractError,
     DetectionFailureCode,
+    KorgisCPUUsage,
+    KorgisMemoryUsage,
+    KorgisRequestEvidence,
+    KorgisResourceUsage,
+    KorgisSamplingInfo,
     LLMInferenceResult,
 )
 from config import config
@@ -183,6 +188,116 @@ class DetectionPipelineTests(unittest.TestCase):
         ]
         self.assertEqual(len(matches), 1)
         self.assertGreater(result.diagnostics.chunks, 1)
+
+
+    def test_page_diagnostics_aggregate_request_resources_without_summing_ram_peaks(self):
+        responses = [
+            LLMInferenceResult(
+                model="test-model",
+                content='{"pii_fields":[]}',
+                latency_ms=2.0,
+                finish_reason="stop",
+                korgis_evidence=KorgisRequestEvidence(
+                    evidence_version="korgis-request-evidence-v1",
+                    request_id="req-1",
+                    execution_source="inference",
+                    resources=KorgisResourceUsage(
+                        snapshot_id="resource-1",
+                        memory=KorgisMemoryUsage(
+                            baseline_bytes=100,
+                            peak_bytes=500,
+                            end_bytes=150,
+                            peak_delta_bytes=400,
+                        ),
+                        cpu=KorgisCPUUsage(
+                            average_percent=100.0,
+                            peak_percent=180.0,
+                        ),
+                        sampling=KorgisSamplingInfo(
+                            interval_ms=100,
+                            sample_count=2,
+                            errors=0,
+                        ),
+                        attribution_scope="korgis_process_tree",
+                        attribution_quality="process_global",
+                    ),
+                ),
+            ),
+            LLMInferenceResult(
+                model="test-model",
+                content='{"pii_fields":[]}',
+                latency_ms=3.0,
+                finish_reason="stop",
+                korgis_evidence=KorgisRequestEvidence(
+                    evidence_version="korgis-request-evidence-v1",
+                    request_id="req-2",
+                    execution_source="inference",
+                    resources=KorgisResourceUsage(
+                        snapshot_id="resource-2",
+                        memory=KorgisMemoryUsage(
+                            baseline_bytes=120,
+                            peak_bytes=700,
+                            end_bytes=160,
+                            peak_delta_bytes=580,
+                        ),
+                        cpu=KorgisCPUUsage(
+                            average_percent=200.0,
+                            peak_percent=260.0,
+                        ),
+                        sampling=KorgisSamplingInfo(
+                            interval_ms=100,
+                            sample_count=6,
+                            errors=0,
+                        ),
+                        attribution_scope="korgis_process_tree",
+                        attribution_quality="process_global",
+                    ),
+                ),
+            ),
+        ]
+        page = PageMarkdown(
+            page_number=1,
+            text=("A" * 35) + " " + ("B" * 35),
+        )
+
+        with (
+            patch("services.pii_detector.call_local_llm", side_effect=responses),
+            patch("services.pii_detector.cache_manager.get_llm", return_value=None),
+            patch("services.pii_detector.cache_manager.set_llm"),
+            patch.object(config, "llm_chunk_max_chars", 40),
+            patch.object(config, "llm_chunk_overlap_chars", 0),
+        ):
+            result = detect_pii_for_page(page, "financial", force=True)
+
+        self.assertEqual(result.diagnostics.inference_requests, 2)
+        self.assertEqual(result.diagnostics.resource_evidence_requests, 2)
+        self.assertEqual(result.diagnostics.peak_memory_bytes, 700)
+        self.assertEqual(result.diagnostics.peak_memory_delta_bytes, 580)
+        self.assertEqual(result.diagnostics.peak_cpu_percent, 260.0)
+        self.assertEqual(result.diagnostics.average_cpu_percent, 175.0)
+        self.assertEqual(
+            result.diagnostics.resource_attribution_qualities,
+            ["process_global"],
+        )
+
+    def test_redactguard_cache_hit_does_not_create_inference_resource_cost(self):
+        page = PageMarkdown(page_number=1, text="No sensitive data.")
+
+        with (
+            patch(
+                "services.pii_detector.cache_manager.get_llm",
+                return_value='{"pii_fields":[]}',
+            ),
+            patch("services.pii_detector.call_local_llm") as inference,
+        ):
+            result = detect_pii_for_page(page, "financial")
+
+        inference.assert_not_called()
+        self.assertEqual(result.diagnostics.cache_hits, 1)
+        self.assertEqual(result.diagnostics.inference_requests, 0)
+        self.assertEqual(result.diagnostics.resource_evidence_requests, 0)
+        self.assertIsNone(result.diagnostics.peak_memory_bytes)
+        self.assertIsNone(result.diagnostics.peak_cpu_percent)
 
     def test_invalid_model_output_is_never_cached_as_success(self):
         response = LLMInferenceResult(
