@@ -91,3 +91,23 @@ RedactGuard preserves these distinctions:
 - attribution quality such as `process_global` remains visible and is not promoted to request-exclusive ownership.
 
 Korgis measures and qualifies resource evidence. RedactGuard consumes, stores, aggregates and presents it; RedactGuard does not implement a second CPU/RAM sampler.
+
+
+## Managed desktop packaging
+
+Managed mode preserves the Korgis process boundary instead of importing Korgis into the RedactGuard backend.
+
+Build-time packaging uses an explicitly supplied Korgis wheel plus SHA-256:
+
+```text
+KORGIS_WHEEL=/path/to/local_llm_server-<version>-py3-none-any.whl
+KORGIS_WHEEL_SHA256=<expected digest>
+```
+
+`scripts/build-sidecar.sh` installs that artifact into a separate `resources/korgis/venv`. The RedactGuard API remains in its own environment. The Tauri process starts Korgis on a dynamically allocated loopback port, waits for Korgis health, then starts the RedactGuard API with the resolved `KORGIS_BASE_URL`.
+
+In development, managed mode requires an explicit `KORGIS_PYTHON` pointing to a Python environment containing the desired Korgis build. External mode remains the default until a released Korgis artifact includes the required request-evidence contract and packaged desktop E2E passes.
+
+The model is not bundled by this mechanism. Model acquisition, verification, cache location and lifecycle remain Korgis responsibilities.
+
+Managed mode fails closed when Korgis does not advertise both the expected runtime identity semantics and `korgis-request-evidence-v1`; external mode remains backwards-compatible with a legacy Korgis instance and simply reports request resource evidence as unavailable.
