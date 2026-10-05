@@ -101,12 +101,12 @@ Managed mode still uses a separate Korgis process. RedactGuard must not import/c
 - branch: `feature/managed-korgis-evidence`
 - old `feature/korgis-runtime-integration` intentionally not reused because it is materially diverged from main.
 - confirmed: main already delegates inference to Korgis and has a typed `LLMInferenceResult`, but only consumes content/token usage and application latency.
-- PR #8 previously passed the complete Validate PR matrix at head `8306328529085efcd97deda6edabaa47220e343e` (run 52): backend, frontend, Rust/Tauri lifecycle, sidecar staging, packaging-script syntax and managed Korgis wheel contract were all PASS. Subsequent pin/provenance/release-wiring changes require fresh exact-head evidence.
+- PR #8 passed the complete Validate PR matrix on the merged Korgis pin (run 65): backend, frontend, Rust/Tauri lifecycle, sidecar staging, packaging-script syntax and the managed Korgis wheel contract were all PASS. Any later tracked-file edit still requires exact-head revalidation before merge.
 - canonical Korgis pin: `.engineering/korgis-runtime.json` -> `14a9a16d4326f2dba93982544b5879c37dde261d`; Korgis candidate is merged onto current `main`; exact-head FULL CI run 691 and Repository Health 383 both PASS on `14a9a16d4326f2dba93982544b5879c37dde261d`.
 - managed packaging strategy: release workflow builds the pinned Korgis wheel, verifies `korgis-request-evidence-v1`, computes SHA-256 and packages it into a separate Korgis venv. No Korgis package is imported by the RedactGuard backend, and models remain Korgis-owned durable data.
 - packaged desktop defaults to managed mode; development/backend standalone defaults to external unless explicitly overridden.
 - RG-8 is intentionally deferred to the existing companion Performance Lab/experiment because current RedactGuard has no canonical benchmark-UI owner. Do not create a parallel benchmark surface here.
-- next discriminating action: obtain fresh RedactGuard exact-head PR validation against the pinned merged Korgis candidate, then run a packaged macOS managed-runtime E2E with a real supported model.
+- next discriminating action: keep exact-head automated validation green, then run the packaged macOS managed-runtime E2E with a real supported model.
 
 ## Completion
 
