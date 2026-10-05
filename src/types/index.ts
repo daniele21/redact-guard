@@ -13,6 +13,14 @@ export interface DetectionDiagnostics {
   parsed_items: number;
   resolved_items: number;
   unresolved_items: number;
+  inference_requests?: number;
+  resource_evidence_requests?: number;
+  peak_memory_bytes?: number | null;
+  peak_memory_delta_bytes?: number | null;
+  average_cpu_percent?: number | null;
+  peak_cpu_percent?: number | null;
+  resource_attribution_scopes?: string[];
+  resource_attribution_qualities?: string[];
 }
 
 export interface PIIField {
