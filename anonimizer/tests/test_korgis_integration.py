@@ -54,6 +54,7 @@ class KorgisInferenceContractTests(unittest.TestCase):
                             "interval_ms": 100,
                             "sample_count": 3,
                             "errors": 0,
+                            "cpu_observation_ms": 275.0,
                         },
                         "attribution": {
                             "scope": "korgis_process_tree",
@@ -77,6 +78,10 @@ class KorgisInferenceContractTests(unittest.TestCase):
         self.assertEqual(result.korgis_evidence.execution_source, "inference")
         self.assertEqual(result.korgis_evidence.resources.memory.peak_bytes, 150)
         self.assertEqual(result.korgis_evidence.resources.cpu.peak_percent, 200.0)
+        self.assertEqual(
+            result.korgis_evidence.resources.sampling.cpu_observation_ms,
+            275.0,
+        )
         request = mocked.call_args.args[0]
         self.assertEqual(request.full_url, config.llm_endpoint)
 
