@@ -103,7 +103,7 @@ pub async fn start_backend(handle: &AppHandle) -> Result<(), String> {
     *state.api_port.lock().unwrap() = api_port;
 
     log::info!("Starting RedactGuard API server on port {}", api_port);
-    start_api_server(handle, api_port, mode, &korgis_base_url).await?;
+    start_api_server(handle, api_port, mode, &korgis_base_url, &model).await?;
     wait_for_http_health(
         &format!("http://127.0.0.1:{api_port}/api/health"),
         API_HEALTH_CHECK_TIMEOUT,
@@ -183,6 +183,7 @@ async fn start_api_server(
     port: u16,
     mode: KorgisMode,
     korgis_base_url: &str,
+    model: &str,
 ) -> Result<(), String> {
     let root = project_root(handle);
     let port_str = port.to_string();
@@ -208,6 +209,7 @@ async fn start_api_server(
             .env("REDACTGUARD_DEV", "1")
             .env("KORGIS_MODE", mode.as_str())
             .env("KORGIS_BASE_URL", korgis_base_url)
+            .env("KORGIS_MODEL", model)
     } else {
         handle
             .shell()
