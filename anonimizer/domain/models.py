@@ -147,6 +147,7 @@ class DocumentResourceSummary(BaseModel):
     peak_cpu_percent: float | None = None
     cpu_sample_count: int | None = None
     sampling_interval_ms: int | None = None
+    cpu_observation_ms: float | None = None
     attribution_scopes: list[str] = Field(default_factory=list)
     attribution_qualities: list[str] = Field(default_factory=list)
 
