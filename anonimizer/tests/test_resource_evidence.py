@@ -26,6 +26,7 @@ def _evidence(
     peak_cpu: float,
     samples: int = 4,
     interval: int = 100,
+    observation_ms: float | None = None,
     scope: str = "korgis_process_tree",
     quality: str = "process_global",
 ):
@@ -49,6 +50,11 @@ def _evidence(
                 interval_ms=interval,
                 sample_count=samples,
                 errors=0,
+                cpu_observation_ms=(
+                    observation_ms
+                    if observation_ms is not None
+                    else float(samples * interval)
+                ),
             ),
             attribution_scope=scope,
             attribution_quality=quality,
@@ -57,7 +63,7 @@ def _evidence(
 
 
 class ResourceEvidenceAggregationTests(unittest.TestCase):
-    def test_ram_peaks_are_max_not_sum_and_cpu_average_is_sample_weighted(self):
+    def test_ram_peaks_are_max_not_sum_and_cpu_average_is_duration_weighted(self):
         acc = ResourceEvidenceAccumulator()
         acc.record_inference(
             _evidence(
@@ -66,6 +72,7 @@ class ResourceEvidenceAggregationTests(unittest.TestCase):
                 avg_cpu=100.0,
                 peak_cpu=150.0,
                 samples=2,
+                observation_ms=100.0,
             )
         )
         acc.record_inference(
@@ -75,6 +82,7 @@ class ResourceEvidenceAggregationTests(unittest.TestCase):
                 avg_cpu=200.0,
                 peak_cpu=260.0,
                 samples=6,
+                observation_ms=900.0,
             )
         )
 
@@ -85,7 +93,8 @@ class ResourceEvidenceAggregationTests(unittest.TestCase):
         self.assertEqual(summary.peak_memory_bytes, 700)
         self.assertEqual(summary.peak_memory_delta_bytes, 300)
         self.assertEqual(summary.peak_cpu_percent, 260.0)
-        self.assertEqual(summary.average_cpu_percent, 175.0)
+        self.assertEqual(summary.average_cpu_percent, 190.0)
+        self.assertEqual(summary.cpu_observation_ms, 1000.0)
         self.assertEqual(
             summary.attribution_qualities,
             ("process_global",),
