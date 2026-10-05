@@ -14,7 +14,7 @@ Released/legacy baseline:
 Integration candidate:
 
 - repository: `daniele21/korgis`
-- commit: `eae6d63380cacd03e87c04ddd09f1825088c0149`
+- commit: `a9095d730ee99def7a03b20f7acc5b7a909c74e0`
 - request evidence protocol: `korgis-request-evidence-v1`
 - RedactGuard CI builds a wheel from this exact commit and verifies the packaged contract before managed-runtime integration is considered deterministic-ready.
 
