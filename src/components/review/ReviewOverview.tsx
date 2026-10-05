@@ -320,6 +320,18 @@ export function ReviewOverview({
                     {state.summary.resources.attribution_scopes.join(', ') || 'unavailable'}
                   </strong>
                 </div>
+                <div>
+                  <span className="block text-outline">Memory source</span>
+                  <strong className="text-on-surface">
+                    {formatEvidenceSources(state.summary.resources.memory_sources)}
+                  </strong>
+                </div>
+                <div>
+                  <span className="block text-outline">CPU source</span>
+                  <strong className="text-on-surface">
+                    {formatEvidenceSources(state.summary.resources.cpu_sources)}
+                  </strong>
+                </div>
               </div>
               {state.summary.resources.attribution_qualities.includes('process_global') && (
                 <p className="mt-3 text-outline">
@@ -434,4 +446,16 @@ function formatBytes(value: number | null): string {
 
 function formatPercent(value: number | null): string {
   return value === null ? 'Unavailable' : `${value.toFixed(1)}%`;
+}
+
+
+function formatEvidenceSources(sources: string[]): string {
+  if (!sources.length) return 'Unavailable';
+  return sources
+    .map((source) =>
+      source.startsWith('ps_process_tree')
+        ? 'Korgis process-tree sampler'
+        : source
+    )
+    .join(', ');
 }
