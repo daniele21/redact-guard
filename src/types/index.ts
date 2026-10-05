@@ -22,6 +22,8 @@ export interface DetectionDiagnostics {
   resource_cpu_sample_count?: number | null;
   resource_cpu_observation_ms?: number | null;
   resource_sampling_interval_ms?: number | null;
+  resource_memory_sources?: string[];
+  resource_cpu_sources?: string[];
   resource_attribution_scopes?: string[];
   resource_attribution_qualities?: string[];
 }
@@ -108,6 +110,8 @@ export interface DocumentResourceSummary {
   cpu_sample_count: number | null;
   sampling_interval_ms: number | null;
   cpu_observation_ms: number | null;
+  memory_sources: string[];
+  cpu_sources: string[];
   attribution_scopes: string[];
   attribution_qualities: string[];
 }
