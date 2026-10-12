@@ -95,5 +95,32 @@ class LocalModelPreferenceTests(unittest.TestCase):
         self.assertNotEqual(read_cache.call_args_list[0].args[0], read_cache.call_args_list[1].args[0])
 
 
+    def test_existing_document_keeps_its_model_after_preference_changes(self):
+        from datetime import datetime, timezone
+        from domain.models import DocumentSession, PageAnalysisResult
+        from api import routes_analyze
+        now = datetime.now(timezone.utc)
+        session = DocumentSession(
+            doc_id="test-doc", original_filename="synthetic.pdf", file_hash="hash",
+            profile_name="general", pages=[PageMarkdown(page_number=1, text="Synthetic")],
+            preprocessed_pages=[], pii_results={}, redaction_overrides={},
+            review_decisions={}, page_analysis_status={1: "not_started"},
+            page_analysis_errors={}, page_diagnostics={},
+            created_at=now, last_accessed_at=now, model_key="test-a",
+        )
+        with patch.object(model_selection, "list_resident_models", return_value=["test-a", "test-b"]):
+            model_selection.select_resident_model("test-b")
+        result = PageAnalysisResult(page_number=1, has_pii=False,
+            pii_fields=[], redacted_text="Synthetic")
+        with (
+            patch("api.routes_analyze.get_session", return_value=session),
+            patch("api.routes_analyze.save_session"),
+            patch("api.routes_analyze.detect_pii_for_page", return_value=result) as detect,
+        ):
+            routes_analyze.analyze_page("test-doc", 1)
+        self.assertEqual(model_selection.get_selected_model(), "test-b")
+        self.assertEqual(detect.call_args.kwargs["model_key"], "test-a")
+
+
 if __name__ == "__main__":
     unittest.main()
