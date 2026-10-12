@@ -68,6 +68,7 @@ def analyze_page(doc_id: str, page_number: int, force: bool = False):
             page_to_analyze,
             session.profile_name,
             force=force,
+            model_key=session.model_key or None,
         )
     except DetectionContractError as exc:
         session.page_analysis_status[page_number] = "failed"
@@ -103,7 +104,7 @@ def analyze_document_batch(doc_id: str):
         save_session(session)
 
         try:
-            result = detect_pii_for_page(page, session.profile_name)
+            result = detect_pii_for_page(page, session.profile_name, model_key=session.model_key or None)
         except DetectionContractError as exc:
             session.page_analysis_status[page.page_number] = "failed"
             session.page_analysis_errors[page.page_number] = (
