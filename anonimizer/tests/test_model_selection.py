@@ -66,6 +66,44 @@ class LocalModelPreferenceTests(unittest.TestCase):
         with self.assertRaises(model_selection.ModelPreferenceError):
             model_selection.get_selected_model()
 
+    def test_selection_api_rejects_unavailable_model_and_preserves_preference(self):
+        from fastapi import HTTPException
+        from api import routes_models
+        with patch.object(model_selection, "list_resident_models", return_value=["test-a"]):
+            with patch("api.routes_models.list_resident_models", return_value=["test-a"]):
+                with self.assertRaises(HTTPException) as err:
+                    routes_models.choose_local_model(
+                        routes_models.ModelSelectionRequest(model="test-b")
+                    )
+        self.assertEqual(err.exception.status_code, 409)
+        self.assertEqual(model_selection.get_selected_model(), config.korgis_model)
+
+    def test_offline_catalog_does_not_clear_saved_selection(self):
+        from api import routes_models
+        with patch.object(model_selection, "list_resident_models", return_value=["test-a"]):
+            model_selection.select_resident_model("test-a")
+        with patch("api.routes_models.list_resident_models",
+                   side_effect=model_selection.ModelCatalogUnavailable("offline")):
+            catalog = routes_models.get_local_models()
+        self.assertEqual(catalog.selected_model, "test-a")
+        self.assertFalse(catalog.discovery_available)
+        self.assertEqual(catalog.models, [])
+        self.assertFalse(catalog.selected_resident)
+
+    def test_health_uses_saved_model_and_does_not_substitute(self):
+        from api import routes_health
+        with patch.object(model_selection, "list_resident_models", return_value=["test-a", "test-b"]):
+            model_selection.select_resident_model("test-b")
+        def fake_get(url, timeout=2.0):
+            if url.endswith("/models"):
+                return {"data": [{"id": "test-a"}]}
+            return {"protocol_version": "local-llm-identity-v1",
+                    "models": {"test-a": {"model": {"id": "test-a"}}}}
+        with patch("api.routes_health._get_json", side_effect=fake_get):
+            health = routes_health.health_check()
+        self.assertEqual(health.model, "test-b")
+        self.assertEqual(health.llm_status, "model_not_resident")
+
     def test_network_discovery_uses_only_resident_openai_ids(self):
         fake = _Response({"data": [{"id": "test-b"}, {"id": "test-a"}, {"id": "test-b"}, {"bad": "x"}]})
         with patch("services.model_selection.urllib.request.urlopen", return_value=fake):
