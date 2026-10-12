@@ -98,3 +98,18 @@ The existing in-memory backend session store is already keyed by independent `do
 **Still pending for issue #12:** backend-enforced review attestation / export readiness (client gate alone is insufficient), session cleanup API and lifecycle under cancellation, representative memory/large-PDF benchmarks, realistic Tauri device E2E and optional explicitly requested partial batch export behavior.
 
 Automated proof: bounded candidate/session tests and per-document state isolation, plus existing static/frontend/backend/sidecar CI. Full session-switch UX evidence requires browser/Tauri interaction testing.
+
+## Backend export attestation and fail-closed guard (stacked)
+
+The desktop UI gate is no longer the sole control for the protected Markdown artifact.
+
+- The canonical backend `services/export_readiness.py` requires a complete result for every page, no failed/warning pages, and zero unresolved proposed findings.
+- `PATCH /api/redact/{doc_id}` now requires an explicit `review_attested=true` flag from the user's confirm-review interaction. Unknown/stale finding IDs are rejected. The backend records document-session attestation after redaction decisions are applied.
+- `GET /api/export/{doc_id}?format=md` requires **both** complete analysis and valid attestation; bypassing the UI no longer downloads an unreviewed original as a supposedly protected artifact.
+- Any reanalysis revokes attestation at its start and invalidates the earlier decisions for the reanalyzed page, including previously accepted `keep`/ `not_pii` choices. A failed reanalysis does not silently restore export permission.
+- Synthetic regression tests cover incomplete/failed/warning/unresolved runs, missing confirmation, unknown IDs, successful redaction and revocation after reanalysis.
+- The read-only client protection report remains accessible for partial/incomplete analysis so exceptions can be understood; its status must not be confused with successful protected-document export.
+
+**Limitations:** This is local in-memory session attestation, not independent proof of human inspection or detector accuracy. The backend does not yet offer authenticated reviewers, durable/auditable attestations, or a transactional concurrent mutation/export snapshot. Runtime concurrency and session-store locking need representative adversarial/real-environment E2E before release. Do not claim complete sensitive-data removal or compliance certification.
+
+API compatibility note: legacy clients calling `PATCH /api/redact/{doc_id}` without `review_attested=true` receive HTTP 409. This is intentional fail-closed security behavior. The included Adaptive Workspace client sends the field after user confirmation.
