@@ -151,7 +151,7 @@ try {
   await snap('01-home');
   assert.equal(await page.getByRole('navigation', { name: 'Spazi di lavoro' }).getByRole('button').count(), 2);
 
-  await page.getByRole('button', { name: /Modelli locali e stato/ }).click();
+  await page.locator('button[title="Modelli locali e stato di Korgis"]').click();
   await page.getByRole('heading', { name: 'Il modello giusto, una sola volta.' }).waitFor();
   await page.getByText('test-model-b', { exact: true }).first().click();
   await page.getByRole('button', { name: 'Usa questo modello' }).click();
