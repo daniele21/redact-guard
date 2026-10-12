@@ -76,6 +76,35 @@ class LocalModelPreferenceTests(unittest.TestCase):
             with self.assertRaises(model_selection.ModelCatalogUnavailable):
                 model_selection.list_resident_models()
 
+    def test_hardware_identity_uses_only_public_allowlisted_evidence(self):
+        payload = {
+            "protocol_version": "local-llm-identity-v1",
+            "models": {"key-a": {
+                "model": {"id": "test-a"},
+                "hardware": {
+                    "system": "darwin", "machine": "arm64",
+                    "logical_cpus": 10, "total_memory_bytes": None,
+                    "processor": None, "private_host": "secret",
+                },
+            }},
+        }
+        with patch("services.model_selection.urllib.request.urlopen",
+                   return_value=_Response(payload)):
+            hardware = model_selection.get_public_hardware("test-a")
+        self.assertEqual(hardware, {
+            "system": "darwin", "machine": "arm64", "logical_cpus": 10,
+        })
+        self.assertNotIn("private_host", hardware)
+
+    def test_identity_missing_model_never_claims_hardware_for_another_model(self):
+        payload = {
+            "protocol_version": "local-llm-identity-v1",
+            "models": {"a": {"model": {"id": "test-a"}, "hardware": {"logical_cpus": 10}}},
+        }
+        with patch("services.model_selection.urllib.request.urlopen",
+                   return_value=_Response(payload)):
+            self.assertIsNone(model_selection.get_public_hardware("test-b"))
+
     def test_model_choice_changes_cache_key_and_inference_model(self):
         response = LLMInferenceResult(
             model="test-b", content='{"pii_fields":[]}', latency_ms=1, finish_reason="stop"
