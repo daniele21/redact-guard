@@ -250,6 +250,7 @@ def get_policy_detail(profile_name: str) -> dict[str, Any]:
         return {
             "profile": profile_name,
             "base_types": [item.model_dump() for item in built_in.pii_types],
+            "inherited_types": [item.model_dump() for item in _base_types(profile_name).values()],
             "effective_types": [item.model_dump() for item in get_all_pii_types(profile_name)],
             "origins": source_by_key,
             "history": scoped,
