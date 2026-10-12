@@ -156,7 +156,7 @@ export default function App() {
               <span>{state.summary?.pages_analyzed ?? state.analyzedCount} / {state.pages.length} pagine analizzate</span>
             </div>
           </div>
-          {runtime !== 'ready' && <p role="status" className="border-b border-warning/30 bg-warning/5 px-6 py-3 text-sm text-warning">{health?.llm_status === 'runtime_incompatible' ? 'La versione del runtime Korgis non soddisfa il contratto richiesto.' : 'Korgis non è pronto: il modello locale deve essere residente.'} Puoi comunque esplorare le definizioni PII. <button type="button" className="underline" onClick={() => setScreen('models')}>Dettagli</button></p>
+          {runtime !== 'ready' && <p role="status" className="border-b border-warning/30 bg-warning/5 px-6 py-3 text-sm text-warning">{health?.llm_status === 'runtime_incompatible' ? 'La versione del runtime Korgis non soddisfa il contratto richiesto.' : 'Korgis non è pronto: il modello locale deve essere residente.'} Puoi comunque esplorare le definizioni PII. <button type="button" className="underline" onClick={() => setScreen('models')}>Dettagli</button></p>}
           {importErrors.length > 0 && <div role="alert" className="border-b border-warning/30 bg-warning/5 px-5 py-3 text-sm text-warning lg:px-9">
             {importErrors.length} {importErrors.length === 1 ? 'file non importato' : 'file non importati'}: {importErrors.map(item => item.filename || item.message).join(', ')}. Nessun file viene considerato elaborato se l'import è fallito.
           </div>}
