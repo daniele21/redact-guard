@@ -6,12 +6,19 @@ import { DocumentPanel } from './DocumentPanel';
 import { fieldId } from './reviewIdentity';
 import { reviewReadiness } from './reviewGate';
 
+export interface ReviewDraft {
+  decisions: Record<string, ReviewDecision>;
+  visitedPages: number[];
+}
+
 interface Props {
   state: DocumentState;
   onAnalyzePage: (page: number, force?: boolean) => Promise<void>;
   onBatchAnalyzePages: (pages: number[], force?: boolean) => Promise<void>;
   onApplyRedactions: (decisions: Record<string, ReviewDecision>) => Promise<void>;
   onProceed: () => void;
+  initialDraft?: ReviewDraft;
+  onDraftChange?: (draft: ReviewDraft) => void;
 }
 
 interface Group {
@@ -27,10 +34,10 @@ const maskValue = (value: string): string => {
   return value.length <= 4 ? value[0] + '•••' : value.slice(0, 2) + '••••' + value.slice(-2);
 };
 
-export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyRedactions, onProceed }: Props) {
+export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyRedactions, onProceed, initialDraft, onDraftChange }: Props) {
   const [page, setPage] = useState(1);
-  const [decisions, setDecisions] = useState<Record<string, ReviewDecision>>({});
-  const [visitedPages, setVisitedPages] = useState<Set<number>>(new Set());
+  const [decisions, setDecisions] = useState<Record<string, ReviewDecision>>(() => initialDraft?.decisions ?? {});
+  const [visitedPages, setVisitedPages] = useState<Set<number>>(() => new Set(initialDraft?.visitedPages ?? []));
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [visibleGroups, setVisibleGroups] = useState(40);
@@ -54,6 +61,10 @@ export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyR
       return next;
     });
   }, [state.analysisResults, state.analysisErrors, page]);
+
+  useEffect(() => {
+    onDraftChange?.({ decisions, visitedPages: Array.from(visitedPages) });
+  }, [decisions, visitedPages, onDraftChange]);
 
   // Privacy-safe initial decision: redact every valid model-proposed finding.
   useEffect(() => {
