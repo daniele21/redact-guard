@@ -108,17 +108,24 @@ export default function App() {
           <span className="rounded-xl bg-primary/15 p-2 text-primary"><Shield size={20} aria-hidden="true" /></span>
           <span className="text-lg font-semibold tracking-tight">RedactGuard</span>
         </button>
-        <nav aria-label="Navigazione principale" className="flex flex-wrap items-center gap-1 sm:gap-3">
-          <button type="button" onClick={openHome} aria-current={screen === 'home' ? 'page' : undefined} className={'rg-nav-link ' + (screen === 'home' ? 'rg-nav-active' : '')}><FileText size={16} aria-hidden="true" /> Documenti</button>
-          <button type="button" onClick={() => setScreen('policy')} aria-current={screen === 'policy' ? 'page' : undefined} className={'rg-nav-link ' + (screen === 'policy' ? 'rg-nav-active' : '')}><BookOpen size={16} aria-hidden="true" /> Libreria PII</button>
-          <button type="button" onClick={() => setScreen('models')} aria-current={screen === 'models' ? 'page' : undefined} className={'rg-nav-link ' + (screen === 'models' ? 'rg-nav-active' : '')}><Cpu size={16} aria-hidden="true" /> Modello locale</button>
-          <button type="button" onClick={() => setScreen('privacy')} aria-current={screen === 'privacy' ? 'page' : undefined} className={'rg-nav-link ' + (screen === 'privacy' ? 'rg-nav-active' : '')}><Settings2 size={16} aria-hidden="true" /> Privacy</button>
+        <nav aria-label="Spazi di lavoro" className="rg-workspace-switcher order-3 mx-auto flex w-full items-center justify-center gap-1 rounded-full p-1 sm:order-none sm:w-auto">
+          <button type="button" onClick={openHome} aria-current={screen === 'home' || screen === 'review' || screen === 'export' ? 'page' : undefined}
+            className={'rg-nav-link rounded-full ' + (screen === 'home' || screen === 'review' || screen === 'export' ? 'rg-nav-active' : '')}><FileText size={16} aria-hidden="true" /> Documenti</button>
+          <button type="button" onClick={() => setScreen('policy')} aria-current={screen === 'policy' ? 'page' : undefined}
+            className={'rg-nav-link rounded-full ' + (screen === 'policy' ? 'rg-nav-active' : '')}><BookOpen size={16} aria-hidden="true" /> Libreria PII</button>
         </nav>
-        <button type="button" onClick={() => setScreen('models')} className="flex items-center gap-2 rounded-full border border-outline-variant/70 px-3 py-2 text-xs text-on-surface-variant hover:border-primary/50" title="Dettagli del modello locale">
-          <span className={'h-2 w-2 rounded-full ' + (runtime === 'ready' ? 'bg-success' : 'bg-warning')} aria-hidden="true" />
-          <span className="hidden xl:inline">{runtime === 'ready' ? 'AI locale pronta' : 'AI locale da configurare'}</span>
-          <span className="max-w-32 truncate">{health?.model ?? 'Korgis'}</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={() => setScreen('models')} aria-current={screen === 'models' ? 'page' : undefined}
+            className="flex min-h-10 items-center gap-2 rounded-full border border-outline-variant/70 px-3 py-2 text-xs text-on-surface-variant hover:border-primary/50 focus-visible:outline-2 focus-visible:outline-primary" title="Modelli locali e stato di Korgis">
+            <span className={'h-2 w-2 shrink-0 rounded-full ' + (runtime === 'ready' ? 'bg-success' : 'bg-warning')} aria-hidden="true" />
+            <Cpu size={15} aria-hidden="true" />
+            <span className="hidden lg:inline max-w-32 truncate">{health?.model ?? 'Korgis'}</span>
+            <span className="sr-only">{runtime === 'ready' ? 'Modello locale pronto' : 'Modello locale da verificare'}</span>
+          </button>
+          <button type="button" onClick={() => setScreen('privacy')} aria-current={screen === 'privacy' ? 'page' : undefined}
+            className="flex h-10 w-10 items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface focus-visible:outline-2 focus-visible:outline-primary"
+            title="Privacy e impostazioni" aria-label="Privacy e impostazioni"><Settings2 size={17} aria-hidden="true" /></button>
+        </div>
       </header>
       {state.docId && screen !== 'review' && screen !== 'export' && (
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-outline-variant/40 bg-surface-container-low px-5 py-2 text-sm lg:px-9">
@@ -149,7 +156,7 @@ export default function App() {
               <span>{state.summary?.pages_analyzed ?? state.analyzedCount} / {state.pages.length} pagine analizzate</span>
             </div>
           </div>
-          {runtime !== 'ready' && <p role="status" className="border-b border-warning/30 bg-warning/5 px-6 py-3 text-sm text-warning">Korgis non è pronto: puoi consultare il documento, ma l'analisi richiede un modello locale residente. <button type="button" className="underline" onClick={() => setScreen('models')}>Dettagli</button></p>}
+          {runtime !== 'ready' && <p role="status" className="border-b border-warning/30 bg-warning/5 px-6 py-3 text-sm text-warning">{health?.llm_status === 'runtime_incompatible' ? 'La versione del runtime Korgis non soddisfa il contratto richiesto.' : 'Korgis non è pronto: il modello locale deve essere residente.'} Puoi comunque esplorare le definizioni PII. <button type="button" className="underline" onClick={() => setScreen('models')}>Dettagli</button></p>
           {importErrors.length > 0 && <div role="alert" className="border-b border-warning/30 bg-warning/5 px-5 py-3 text-sm text-warning lg:px-9">
             {importErrors.length} {importErrors.length === 1 ? 'file non importato' : 'file non importati'}: {importErrors.map(item => item.filename || item.message).join(', ')}. Nessun file viene considerato elaborato se l'import è fallito.
           </div>}
