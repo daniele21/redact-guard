@@ -9,6 +9,7 @@ import {
   PIITypeDefinition,
   HealthResponse,
   DocumentAnalysisSummary,
+  LocalModelCatalog,
 } from '../types';
 
 let API_BASE = '/api';
@@ -192,6 +193,24 @@ export const api = {
     const base = await getBase();
     const res = await fetch(`${base}/cache`, { method: 'DELETE' });
     if (!res.ok) throw new Error(await errorMessage(res, 'Failed to clear local caches'));
+  },
+
+  getLocalModels: async (): Promise<LocalModelCatalog> => {
+    const base = await getBase();
+    const res = await fetch(`${base}/local-models`, { cache: 'no-store' });
+    if (!res.ok) throw new Error(await errorMessage(res, 'Failed to read local models'));
+    return res.json();
+  },
+
+  selectLocalModel: async (model: string): Promise<LocalModelCatalog> => {
+    const base = await getBase();
+    const res = await fetch(`${base}/local-models/selection`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model }),
+    });
+    if (!res.ok) throw new Error(await errorMessage(res, 'Failed to choose local model'));
+    return res.json();
   },
 
   exportDocumentUrl: (docId: string): string => {
