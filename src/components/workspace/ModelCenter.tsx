@@ -1,5 +1,7 @@
-import { ArrowLeft, Cpu, Info, LockKeyhole, RefreshCw, ServerOff } from 'lucide-react';
-import type { HealthResponse } from '../../types';
+import { useCallback, useEffect, useState } from 'react';
+import { ArrowLeft, CheckCircle2, Cpu, Info, LockKeyhole, RefreshCw, ServerOff, ShieldCheck } from 'lucide-react';
+import { api } from '../../services/api';
+import type { HealthResponse, LocalModelCatalog } from '../../types';
 
 interface Props {
   health: HealthResponse | null;
@@ -8,41 +10,126 @@ interface Props {
 }
 
 export function ModelCenter({ health, onBack, onRetry }: Props) {
-  const online = health?.llm_status === 'online';
+  const [catalog, setCatalog] = useState<LocalModelCatalog | null>(null);
+  const [candidate, setCandidate] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const next = await api.getLocalModels();
+      setCatalog(next);
+      setCandidate(next.selected_model);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Impossibile verificare i modelli di Korgis.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void refresh(); }, [refresh]);
+
+  const save = async () => {
+    if (!candidate || !catalog || candidate === catalog.selected_model) return;
+    setSaving(true);
+    setError('');
+    setNotice('');
+    try {
+      const next = await api.selectLocalModel(candidate);
+      setCatalog(next);
+      setCandidate(next.selected_model);
+      setNotice('Scelta salvata. Verrà usata automaticamente per i nuovi documenti.');
+      onRetry();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Impossibile salvare il modello locale.');
+      await refresh();
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-8 lg:px-12">
-      <button type="button" onClick={onBack} className="mb-8 flex items-center gap-2 text-sm text-on-surface-variant hover:text-on-surface"><ArrowLeft size={16} aria-hidden="true" /> Torna ai documenti</button>
-      <div className="mb-8 flex items-center gap-3 text-primary"><Cpu size={23} aria-hidden="true" /><span className="text-sm">AI locale · Korgis</span></div>
-      <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Il tuo modello locale</h1>
-      <p className="mt-4 max-w-2xl text-sm leading-7 text-on-surface-variant">Il modello configurato rimane attivo tra un documento e l'altro. Non è necessario sceglierlo a ogni importazione.</p>
+      <button type="button" onClick={onBack} className="mb-8 flex items-center gap-2 text-sm text-on-surface-variant hover:text-on-surface">
+        <ArrowLeft size={16} aria-hidden="true" /> Torna ai documenti
+      </button>
+      <div className="mb-5 flex items-center gap-3 text-primary"><Cpu size={22} aria-hidden="true" /> <span className="text-sm">AI locale · Korgis</span></div>
+      <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Il modello giusto, una sola volta.</h1>
+      <p className="mt-4 max-w-2xl text-sm leading-7 text-on-surface-variant">
+        Scegli fra i modelli già in esecuzione sul tuo computer. RedactGuard conserva la scelta e la applica automaticamente ai prossimi documenti.
+      </p>
 
-      <section className="rg-context-card mt-9 rounded-3xl p-6 md:p-8" aria-label="Stato del modello configurato">
+      <section className="rg-context-card mt-8 rounded-3xl p-6 md:p-8" aria-label="Modello configurato">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-xs text-on-surface-variant">Modello configurato nel backend</p>
-            <h2 className="mt-2 break-all text-2xl font-medium">{health?.model ?? 'Non disponibile'}</h2>
+            <p className="text-xs text-on-surface-variant">Modello attivo in RedactGuard</p>
+            <h2 className="mt-2 break-all text-2xl font-medium">{catalog?.selected_model ?? health?.model ?? 'Da verificare'}</h2>
           </div>
-          <span className={'rounded-full border px-3 py-1.5 text-xs ' + (online ? 'border-success/30 text-success' : 'border-warning/40 text-warning')}>
-            {online ? 'Pronto per l’analisi' : health?.llm_status === 'model_not_resident' ? 'Modello non residente' : 'Runtime non disponibile'}
+          <span className={'rounded-full border px-3 py-1.5 text-xs ' +
+            (catalog?.selected_resident ? 'border-success/40 text-success' : 'border-warning/40 text-warning')}>
+            {catalog?.selected_resident ? 'Residente in Korgis' : 'Residenza non verificata'}
           </span>
         </div>
-        <div className="my-6 h-px bg-outline-variant/50" />
-        <div className="grid gap-4 sm:grid-cols-3">
-          <div><p className="text-xs text-on-surface-variant">Esecuzione</p><p className="mt-2 flex items-center gap-2 text-sm"><LockKeyhole size={15} aria-hidden="true" /> Sul dispositivo</p></div>
-          <div><p className="text-xs text-on-surface-variant">Identità runtime</p><p className="mt-2 break-all text-sm">{health?.korgis_protocol_version ?? 'Non disponibile'}</p></div>
-          <div><p className="text-xs text-on-surface-variant">Prestazioni PII e requisiti hardware</p><p className="mt-2 text-sm">Nessuna misura qualificata collegata</p></div>
+        <div className="mt-5 flex flex-wrap items-center gap-5 text-xs text-on-surface-variant">
+          <span className="flex items-center gap-2"><LockKeyhole size={15} aria-hidden="true" /> Inferenza locale</span>
+          <span>Protocollo: {health?.korgis_protocol_version ?? 'Non disponibile'}</span>
+          <span>Requisiti RAM e benchmark PII: <strong className="font-medium text-on-surface">non ancora qualificati</strong></span>
         </div>
-        <button type="button" onClick={onRetry} className="rg-secondary-button mt-7 flex items-center gap-2"><RefreshCw size={16} aria-hidden="true" /> Aggiorna stato</button>
       </section>
 
-      {!online && <div role="status" className="mt-5 flex items-start gap-3 rounded-2xl border border-warning/30 bg-warning/5 p-5">
-        <ServerOff size={21} className="mt-0.5 shrink-0 text-warning" aria-hidden="true" />
-        <div><h3 className="font-medium">Korgis richiede attenzione</h3>
-          <p className="mt-2 text-sm leading-6 text-on-surface-variant">Il runtime deve essere avviato e il modello configurato deve essere residente. Puoi consultare e personalizzare le PII anche senza un modello disponibile. RedactGuard non sostituisce automaticamente il modello configurato.</p></div>
-      </div>}
-      <div className="mt-7 flex items-start gap-3 text-on-surface-variant">
+      <div className="mt-8 flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-semibold">Modelli disponibili ora</h2>
+          <p className="mt-1 text-sm text-on-surface-variant">Korgis determina quali modelli sono effettivamente residenti.</p>
+        </div>
+        <button type="button" onClick={() => { void refresh(); onRetry(); }} disabled={loading || saving} className="rg-secondary-button flex items-center gap-2">
+          <RefreshCw size={16} aria-hidden="true" /> Aggiorna elenco
+        </button>
+      </div>
+
+      {loading ? <p role="status" className="mt-5 rounded-xl bg-surface-container-low p-5 text-sm text-on-surface-variant">Verifica dei modelli locali…</p>
+      : !catalog?.discovery_available ? (
+        <div role="status" className="mt-5 flex gap-3 rounded-2xl border border-warning/30 bg-warning/5 p-5">
+          <ServerOff size={20} className="shrink-0 text-warning" aria-hidden="true" />
+          <div><h3 className="font-medium">Korgis non è raggiungibile</h3><p className="mt-1 text-sm leading-6 text-on-surface-variant">La scelta salvata non viene cambiata automaticamente. Avvia il runtime locale e aggiorna l'elenco.</p></div>
+        </div>
+      ) : catalog.models.length === 0 ? (
+        <div role="status" className="mt-5 rounded-2xl border border-outline-variant p-6 text-sm text-on-surface-variant">Nessun modello residente. Caricane uno in Korgis e aggiorna questa schermata.</div>
+      ) : (
+        <div className="mt-5 space-y-2" role="radiogroup" aria-label="Seleziona modello locale per i prossimi documenti">
+          {catalog.models.map(model => (
+            <label key={model} className={'flex cursor-pointer items-center gap-4 rounded-2xl border p-4 transition-colors ' +
+              (candidate === model ? 'border-primary/60 bg-primary/10' : 'border-outline-variant/60 bg-surface-container-lowest/70 hover:border-primary/30')}>
+              <input type="radio" name="resident-model" value={model}
+                checked={candidate === model} onChange={() => { setCandidate(model); setNotice(''); }}
+                disabled={saving} className="accent-primary" />
+              <div className="min-w-0 flex-1"><div className="break-all text-sm font-medium">{model}</div>
+                <div className="mt-1 text-xs text-on-surface-variant">Residente · prestazioni PII non qualificate</div></div>
+              {catalog.selected_model === model && <span className="flex items-center gap-1 text-xs text-success"><CheckCircle2 size={15} aria-hidden="true" /> Salvato</span>}
+            </label>
+          ))}
+        </div>
+      )}
+
+      {catalog?.discovery_available && catalog.models.length > 0 && (
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-4">
+          <p className="max-w-lg text-xs leading-5 text-on-surface-variant">La modifica vale per i nuovi documenti. Quelli già importati conservano il modello scelto all'apertura.</p>
+          <button type="button" className="rg-primary-button" onClick={() => { void save(); }}
+            disabled={saving || loading || candidate === catalog.selected_model || !catalog.models.includes(candidate)}>
+            {saving ? 'Salvataggio…' : 'Usa questo modello'}
+          </button>
+        </div>
+      )}
+      {notice && <p role="status" className="mt-4 flex items-center gap-2 text-sm text-success"><ShieldCheck size={17} aria-hidden="true" /> {notice}</p>}
+      {error && <p role="alert" className="mt-4 rounded-xl border border-error/30 bg-error/10 p-4 text-sm text-error">{error}</p>}
+
+      <div className="mt-9 flex items-start gap-3 text-on-surface-variant">
         <Info size={18} className="mt-0.5 shrink-0" aria-hidden="true" />
-        <p className="max-w-3xl text-sm leading-6">Il catalogo con selezione persistente, controllo hardware e confronto benchmark verrà collegato alle API di Korgis e al benchmark RedactGuard prima di abilitare il cambio modello dall'interfaccia. Non mostriamo stime di qualità, RAM o compatibilità prive di evidenza. Attualmente la scelta si configura tramite Korgis e la configurazione locale dell'app.</p>
+        <p className="text-sm leading-6">I modelli non residenti vanno gestiti da Korgis: RedactGuard non abilita API amministrative prive di autenticazione. Non vengono mostrate classifiche di accuratezza, velocità o fabbisogno hardware senza benchmark misurati e riconducibili al modello e al dispositivo.</p>
       </div>
     </main>
   );
