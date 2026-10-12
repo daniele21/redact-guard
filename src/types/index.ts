@@ -52,6 +52,7 @@ export interface UploadResponse {
   page_count: number;
   profile: string;
   model: string;
+  policy_digest: string;
   pages: UploadResponsePage[];
 }
 
