@@ -102,6 +102,7 @@ class DocumentSession:
     policy_types: list[PIITypeDefinition] | None = None
     policy_prompt: str | None = None
     policy_digest: str = ""
+    review_attested: bool = False
 
 
 class UploadResponsePage(BaseModel):
@@ -174,6 +175,7 @@ class RedactRequestItem(BaseModel):
 
 class RedactRequest(BaseModel):
     fields_to_redact: list[RedactRequestItem]
+    review_attested: bool = False
 
 
 class RedactedPage(BaseModel):
