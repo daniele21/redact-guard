@@ -22,17 +22,19 @@ from utils.span_utils import _find_whitespace_normalized_span
 logger = logging.getLogger("redactguard.pii_detector")
 
 
-def call_local_llm(prompt: str, user_text: str) -> LLMInferenceResult:
+def call_local_llm(prompt: str, user_text: str, model_key: str | None = None) -> LLMInferenceResult:
     """Compatibility wrapper around the versioned Korgis inference boundary."""
-    return call_korgis(prompt, user_text)
+    return call_korgis(prompt, user_text, model_key=model_key) if model_key else call_korgis(prompt, user_text)
 
 
 def detect_pii_for_page(
     page: PageMarkdown,
     profile_name: str,
     force: bool = False,
+    model_key: str | None = None,
 ) -> PageAnalysisResult:
     """Analyze one page with the versioned RedactGuard detection contract."""
+    selected_model = model_key or config.korgis_model
     system_prompt = build_system_prompt(profile_name)
     type_definitions = {
         pii_type.name: pii_type
@@ -67,7 +69,7 @@ def detect_pii_for_page(
         cache_key = build_llm_cache_key(
             system_prompt,
             segment.text,
-            config.korgis_model,
+            selected_model,
             variant=cache_variant,
         )
         cached_raw = cache_manager.get_llm(cache_key) if not force else None
@@ -76,7 +78,7 @@ def detect_pii_for_page(
             raw_response = str(cached_raw)
             cache_hits += 1
         else:
-            inference = call_local_llm(system_prompt, segment.text)
+            inference = call_local_llm(system_prompt, segment.text, model_key=selected_model) if model_key else call_local_llm(system_prompt, segment.text)
             raw_response = inference.content
             total_latency_ms += inference.latency_ms
             input_tokens = _add_optional(input_tokens, inference.input_tokens)
@@ -167,7 +169,7 @@ def detect_pii_for_page(
         )
 
     diagnostics = DetectionDiagnostics(
-        model=config.korgis_model,
+        model=selected_model,
         chunks=len(segments),
         cache_hits=cache_hits,
         latency_ms=total_latency_ms,
