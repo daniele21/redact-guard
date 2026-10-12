@@ -1,11 +1,13 @@
 import { useState } from 'react';
-import { ArrowLeft, Database, HardDrive, LockKeyhole, RotateCcw, ShieldCheck, Trash2 } from 'lucide-react';
+import { ArrowLeft, Database, HardDrive, LockKeyhole, RotateCcw, ShieldCheck, Trash2, Moon, Sun } from 'lucide-react';
+import { useTheme } from '../../hooks/useTheme';
 import { api } from '../../services/api';
 
 interface Props { onBack: () => void; notice: string; onNotice: (value: string) => void; }
 
 export function PrivacyPanel({ onBack, notice, onNotice }: Props) {
   const [busy, setBusy] = useState(false);
+  const { theme, toggleTheme } = useTheme();
   const clear = async () => {
     if (!window.confirm('Eliminare tutte le cache locali di conversione e inferenza? I modelli gestiti da Korgis e le definizioni PII non verranno eliminati.')) return;
     setBusy(true);
@@ -37,6 +39,13 @@ export function PrivacyPanel({ onBack, notice, onNotice }: Props) {
           <p className="mt-2 text-sm leading-6 text-on-surface-variant">Le personalizzazioni vengono salvate sul dispositivo e applicate alle successive analisi. La modifica della policy non elimina automaticamente le cache precedenti, ma ne modifica la chiave di riutilizzo.</p>
         </section>
       </div>
+      <section className="rg-context-card mt-4 flex flex-wrap items-center justify-between gap-4 rounded-2xl p-6">
+        <div className="flex items-center gap-3">
+          {theme === 'dark' ? <Moon size={20} className="text-primary" aria-hidden="true" /> : <Sun size={20} className="text-primary" aria-hidden="true" />}
+          <div><h2 className="text-lg font-medium">Aspetto</h2><p className="mt-1 text-sm text-on-surface-variant">Tema {theme === 'dark' ? 'scuro' : 'chiaro'}</p></div>
+        </div>
+        <button type="button" className="rg-secondary-button" onClick={toggleTheme}>Passa al tema {theme === 'dark' ? 'chiaro' : 'scuro'}</button>
+      </section>
       <section className="rg-context-card mt-4 flex flex-wrap items-center justify-between gap-4 rounded-2xl p-6">
         <div className="max-w-xl">
           <div className="mb-2 flex items-center gap-2"><Database size={19} className="text-primary" aria-hidden="true" /><h2 className="text-lg font-medium">Cache di elaborazione</h2></div>
