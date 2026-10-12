@@ -148,6 +148,24 @@ export interface ProfileSummary {
   pii_type_count: number;
 }
 
+export interface PolicyRevision {
+  revision: number;
+  description?: string;
+  label?: string | null;
+  enabled?: boolean;
+  restore?: boolean;
+  created_at: string;
+}
+
+export interface ScopedPolicyDetail {
+  profile: string;
+  base_types: PIITypeDefinition[];
+  inherited_types: PIITypeDefinition[];
+  effective_types: PIITypeDefinition[];
+  origins: Record<string, 'predefined' | 'legacy_global' | 'scoped'>;
+  history: Record<string, PolicyRevision[]>;
+}
+
 export interface ProfileDetail {
   name: string;
   display_name: string;

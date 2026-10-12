@@ -99,6 +99,9 @@ class DocumentSession:
     created_at: datetime
     last_accessed_at: datetime
     model_key: str = ""  # Frozen when uploaded; legacy tests use the configured default.
+    policy_types: list[PIITypeDefinition] | None = None
+    policy_prompt: str | None = None
+    policy_digest: str = ""
 
 
 class UploadResponsePage(BaseModel):
@@ -111,7 +114,8 @@ class UploadResponse(BaseModel):
     doc_id: str
     page_count: int
     profile: str
-    model: str = "" 
+    model: str = ""
+    policy_digest: str = ""
     pages: list[UploadResponsePage]
 
 

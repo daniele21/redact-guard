@@ -10,7 +10,7 @@ from domain.detection import (
     DetectionDiagnostics,
     LLMInferenceResult,
 )
-from domain.models import PageAnalysisResult, PageMarkdown, PIIField
+from domain.models import PageAnalysisResult, PageMarkdown, PIIField, PIITypeDefinition
 from services.finding_identity import build_entity_id, build_finding_id
 from services.korgis_client import call_korgis
 from services.output_contract import parse_model_response
@@ -32,13 +32,15 @@ def detect_pii_for_page(
     profile_name: str,
     force: bool = False,
     model_key: str | None = None,
+    policy_types: list[PIITypeDefinition] | None = None,
+    policy_prompt: str | None = None,
 ) -> PageAnalysisResult:
     """Analyze one page with the versioned RedactGuard detection contract."""
     selected_model = model_key or config.korgis_model
-    system_prompt = build_system_prompt(profile_name)
+    system_prompt = policy_prompt if policy_prompt is not None else build_system_prompt(profile_name)
     type_definitions = {
         pii_type.name: pii_type
-        for pii_type in get_all_pii_types(profile_name)
+        for pii_type in (policy_types if policy_types is not None else get_all_pii_types(profile_name))
     }
     allowed_types = set(type_definitions)
     segments = segment_text(

@@ -10,9 +10,9 @@ from domain.models import PIITypeDefinition
 from services.profile_service import get_all_pii_types
 
 
-def build_system_prompt(profile_name: str) -> str:
+def build_system_prompt(profile_name: str, types: list[PIITypeDefinition] | None = None) -> str:
     """Build the compact model-facing PII detection prompt."""
-    all_types = get_all_pii_types(profile_name)
+    all_types = types if types is not None else get_all_pii_types(profile_name)
     type_block = _format_type_instructions(all_types)
     allowed_types = ", ".join(f'"{t.name}"' for t in all_types)
 
