@@ -20,6 +20,11 @@ interface PIISidebarProps {
   onNavigateToPage?: (pageNum: number) => void;
 }
 
+const maskValue = (value: string): string => {
+  if (!value) return '••••';
+  return value.length <= 4 ? value[0] + '•••' : value.slice(0, 2) + '••••' + value.slice(-2);
+};
+
 export function PIISidebar({
   fields,
   allResults,
@@ -128,7 +133,7 @@ export function PIISidebar({
                   <div className="flex items-start justify-between">
                     <div className="flex-1 min-w-0 pr-2">
                       <p className={`text-sm font-bold truncate ${isRedacted ? 'text-on-surface' : 'text-on-surface-variant line-through'}`}>
-                        {value}
+                        {maskValue(value)}
                       </p>
                       <p className="text-[9px] text-on-surface-variant truncate uppercase tracking-tighter opacity-70">
                         {info.field_name} • {info.occurrences.length} {info.occurrences.length === 1 ? 'occ' : 'occs'}

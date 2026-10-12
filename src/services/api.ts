@@ -188,6 +188,12 @@ export const api = {
     if (!res.ok) throw new Error('Failed to remove custom type');
   },
 
+  clearCache: async (): Promise<void> => {
+    const base = await getBase();
+    const res = await fetch(`${base}/cache`, { method: 'DELETE' });
+    if (!res.ok) throw new Error(await errorMessage(res, 'Failed to clear local caches'));
+  },
+
   exportDocumentUrl: (docId: string): string => {
     return `${API_BASE}/export/${docId}?format=md`;
   },

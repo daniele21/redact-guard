@@ -32,6 +32,8 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
+      - run: node --experimental-strip-types --test src/components/review/reviewGate.test.mjs
+      - run: pnpm build
 
   rust:
     runs-on: ubuntu-latest

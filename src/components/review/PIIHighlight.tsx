@@ -14,8 +14,10 @@ export function PIIHighlight({ field, isRedacted, onToggle }: PIIHighlightProps)
   const colorClass = category.color;
 
   return (
-    <span 
+    <button
+      type="button"
       onClick={onToggle}
+      aria-label={isRedacted ? 'Mostra e mantieni ' + field.field_name : 'Oscura ' + field.field_name}
       className={`
         inline-flex items-center mx-0.5 px-1.5 rounded-md cursor-pointer transition-all duration-200 border-b-2
         ${isRedacted 
@@ -23,9 +25,9 @@ export function PIIHighlight({ field, isRedacted, onToggle }: PIIHighlightProps)
           : `bg-${colorClass}/10 text-on-surface border-${colorClass}/50 hover:bg-${colorClass}/20`
         }
       `}
-      title={`${field.field_name} (${category.label})\nClick to toggle redaction`}
+      title={field.field_name + ' (' + category.label + ') · Cambia decisione'}
     >
       {isRedacted ? field.redacted_value : field.value}
-    </span>
+    </button>
   );
 }
