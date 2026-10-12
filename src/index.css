@@ -44,24 +44,24 @@
 @layer base {
   .dark {
     /* Primary palette - Dark Mode Adjustments */
-    --color-primary: #adc6ff;
+    --color-primary: #89b6ff;
     --color-on-primary: #002e7a;
     --color-primary-container: #1e40af;
 
     /* Surface system - Dark Mode */
-    --color-surface: #0f172a;
-    --color-surface-dim: #1e293b;
-    --color-surface-container-lowest: #020617;
-    --color-surface-container-low: #1e293b;
-    --color-surface-container: #0f172a;
-    --color-surface-container-high: #1e293b;
-    --color-surface-container-highest: #334155;
+    --color-surface: #090f1b;
+    --color-surface-dim: #111b2a;
+    --color-surface-container-lowest: #0e1928;
+    --color-surface-container-low: #111c2c;
+    --color-surface-container: #142033;
+    --color-surface-container-high: #1c2a3d;
+    --color-surface-container-highest: #26364d;
 
     /* Text - Dark Mode */
     --color-on-surface: #f1f5f9;
     --color-on-surface-variant: #94a3b8;
     --color-outline: #64748b;
-    --color-outline-variant: #334155;
+    --color-outline-variant: #314258;
 
     /* Feedback - Dark Mode */
     --color-error: #ffb4ab;
@@ -110,5 +110,42 @@
 
   .animate-shake {
     animation: shake 0.4s ease-in-out;
+  }
+}
+
+
+/* Adaptive Workspace: shared desktop surfaces and interaction primitives. */
+@layer components {
+  .rg-shell {
+    background-image: radial-gradient(ellipse 65% 40% at 70% -20%, color-mix(in srgb, var(--color-primary) 9%, transparent), transparent);
+  }
+  .rg-topbar {
+    background: color-mix(in srgb, var(--color-surface) 92%, transparent);
+    backdrop-filter: blur(20px);
+  }
+  .rg-primary-button {
+    @apply inline-flex min-h-11 items-center justify-center rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-on-primary transition-colors hover:bg-primary/85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .rg-secondary-button {
+    @apply inline-flex min-h-11 items-center justify-center rounded-xl border border-outline-variant bg-surface-container-low px-5 py-2.5 text-sm font-medium text-on-surface transition-colors hover:border-primary/50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:opacity-50;
+  }
+  .rg-context-card {
+    @apply border border-outline-variant/70 bg-surface-container-lowest/80;
+  }
+  .rg-nav-link {
+    @apply inline-flex min-h-10 items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface focus-visible:outline-2 focus-visible:outline-primary;
+  }
+  .rg-nav-active {
+    @apply bg-surface-container-high text-on-surface;
+  }
+  .rg-home-drop {
+    background: linear-gradient(145deg, color-mix(in srgb, var(--color-primary) 13%, var(--color-surface-container-lowest)), var(--color-surface-container-lowest) 72%);
+    border: 1px solid var(--color-outline-variant);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rg-shell *, .rg-shell *::before, .rg-shell *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
   }
 }
