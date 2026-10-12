@@ -8,6 +8,7 @@ from services.redaction_engine import (
     decision_for_field,
 )
 from services.session_store import get_session, save_session
+from services.export_readiness import ReviewNotReady, ensure_complete_analysis
 
 router = APIRouter()
 
@@ -22,7 +23,24 @@ def apply_redaction(doc_id: str, request: RedactRequest):
             detail="Document session not found or expired.",
         )
 
+    try:
+        ensure_complete_analysis(session)
+    except ReviewNotReady as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if not request.review_attested:
+        raise HTTPException(status_code=409, detail="Explicit human review confirmation is required.")
+
+    valid_ids = {
+        field.finding_id
+        for fields in session.pii_results.values()
+        for field in fields
+    }
+    if any(item.field_id not in valid_ids for item in request.fields_to_redact):
+        raise HTTPException(status_code=409, detail="The submitted findings are stale or unknown. Review again.")
+
+    # Reset invalidated old decisions before applying the confirmed review.
     redacted_pages = apply_redaction_to_document(session, request)
+    session.review_attested = True
     save_session(session)
 
     decisions: Counter[str] = Counter()
