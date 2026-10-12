@@ -6,6 +6,7 @@ from pydantic import BaseModel
 
 from config import config
 from cache.cache_manager import cache_manager
+from services.model_selection import get_selected_model
 
 router = APIRouter()
 
@@ -31,6 +32,7 @@ def _get_json(url: str, timeout: float = 2.0) -> dict:
 @router.get("/health", response_model=HealthResponse)
 def health_check():
     """Report backend health and the configured model's readiness in Korgis."""
+    selected_model = get_selected_model()
     llm_status = "offline"
     protocol_version = None
 
@@ -47,7 +49,7 @@ def health_check():
         protocol_version = identity_payload.get("protocol_version")
         identity_models = identity_payload.get("models") or {}
 
-        if config.korgis_model in resident or config.korgis_model in identity_models:
+        if selected_model in resident or selected_model in identity_models:
             llm_status = "online"
         else:
             llm_status = "model_not_resident"
@@ -57,7 +59,7 @@ def health_check():
     return HealthResponse(
         status="ok",
         llm_status=llm_status,
-        model=config.korgis_model,
+        model=selected_model,
         korgis_protocol_version=protocol_version,
         cache_stats=cache_manager.get_stats(),
     )
