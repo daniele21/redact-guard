@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from 'react';
 import { api } from '../services/api';
+import { updateById, validatePdfCandidate, validateSessionCapacity } from './documentQueue';
 import type {
   DocumentAnalysisSummary, PageAnalysisResult, RedactRequestItem,
   RedactedPage, UploadResponse,
@@ -75,10 +76,7 @@ export function useDocument() {
   const state = active ?? emptyDocument();
 
   const update = useCallback((docId: string, apply: (state: DocumentState) => DocumentState) => {
-    setById(previous => {
-      const current = previous[docId];
-      return current ? { ...previous, [docId]: apply(current) } : previous;
-    });
+    setById(previous => updateById(previous, docId, apply));
   }, []);
 
   const refreshSummary = useCallback(async (docId: string) => {
@@ -89,6 +87,12 @@ export function useDocument() {
 
   const uploadFiles = useCallback(async (files: File[], profile: string) => {
     if (importing.current) return { added: 0, errors: [{ filename: '', message: 'Importazione già in corso.' }] };
+    const capacityError = validateSessionCapacity(order.length, files.length);
+    if (capacityError) {
+      const errors = [{ filename: '', message: capacityError }];
+      setImportErrors(errors);
+      return { added: 0, errors };
+    }
     importing.current = true;
     setIsImporting(true);
     setImportErrors([]);
@@ -99,8 +103,9 @@ export function useDocument() {
       // backend document session per PDF. This is NOT fake client-side batch inference.
       for (const file of files) {
         setImportingFile(file.name);
-        if (!file.name.toLowerCase().endsWith('.pdf') || file.size > 50 * 1024 * 1024) {
-          errors.push({ filename: file.name, message: 'Supportati soltanto PDF fino a 50 MB.' });
+        const validation = validatePdfCandidate(file);
+        if (validation) {
+          errors.push({ filename: file.name, message: validation });
           continue;
         }
         try {
@@ -132,7 +137,7 @@ export function useDocument() {
       setIsImporting(false);
       setImportingFile('');
     }
-  }, []);
+  }, [order.length]);
 
   const upload = useCallback(async (file: File, profile: string) => {
     const result = await uploadFiles([file], profile);
