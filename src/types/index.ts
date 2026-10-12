@@ -160,6 +160,14 @@ export interface LocalModelCatalog {
   models: string[];
   selected_resident: boolean;
   discovery_available: boolean;
+  hardware?: {
+    system?: string;
+    machine?: string;
+    processor?: string;
+    accelerator?: string;
+    logical_cpus?: number;
+    total_memory_bytes?: number;
+  } | null;
 }
 
 export interface HealthResponse {
