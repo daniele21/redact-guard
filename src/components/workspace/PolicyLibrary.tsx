@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, BookOpen, Check, Copy, Pencil, Plus, RotateCcw, Search, ShieldCheck } from 'lucide-react';
 import { useProfiles } from '../../hooks/useProfiles';
 import { api } from '../../services/api';
-import type { PIITypeDefinition, ProfileDetail } from '../../types';
+import type { PIITypeDefinition, ScopedPolicyDetail } from '../../types';
 
 interface Props {
   activeProfile: string;
@@ -13,8 +13,8 @@ interface Props {
 const normalizeName = (value: string) => value.trim().toLowerCase().replace(/[^a-z0-9_ ]/g, '').replace(/\s+/g, '_');
 
 export function PolicyLibrary({ activeProfile, onChooseProfile, onBack }: Props) {
-  const { profiles, customTypes, loading, error: listError, addCustomType, updateCustomType, removeCustomType } = useProfiles();
-  const [detail, setDetail] = useState<ProfileDetail | null>(null);
+  const { profiles, loading, error: listError } = useProfiles();
+  const [detail, setDetail] = useState<ScopedPolicyDetail | null>(null);
   const [detailError, setDetailError] = useState('');
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [query, setQuery] = useState('');
@@ -32,7 +32,7 @@ export function PolicyLibrary({ activeProfile, onChooseProfile, onBack }: Props)
     setDetail(null);
     setSelectedKey(null);
     setDetailError('');
-    api.getProfileDetail(activeProfile).then(next => {
+    api.getScopedPolicy(activeProfile).then(next => {
       if (alive) setDetail(next);
     }).catch(() => {
       if (alive) setDetailError('Non è stato possibile caricare le definizioni del profilo.');
@@ -40,17 +40,14 @@ export function PolicyLibrary({ activeProfile, onChooseProfile, onBack }: Props)
     return () => { alive = false; };
   }, [activeProfile]);
 
-  const definitions = useMemo(() => {
-    const originals = detail?.pii_types ?? [];
-    const names = new Set(originals.map(item => item.name));
-    return [...originals, ...customTypes.filter(item => !names.has(item.name))]
-      .filter(item => [item.name, item.label, item.description].join(' ').toLowerCase().includes(query.toLowerCase()))
-      .sort((a, b) => a.label.localeCompare(b.label));
-  }, [detail, customTypes, query]);
+  const definitions = useMemo(() => (detail?.effective_types ?? [])
+    .filter(item => [item.name, item.label, item.description].join(' ').toLowerCase().includes(query.toLowerCase()))
+    .sort((a, b) => a.label.localeCompare(b.label)), [detail, query]);
 
-  const original = detail?.pii_types.find(type => type.name === selectedKey);
-  const override = customTypes.find(type => type.name === selectedKey);
-  const current: PIITypeDefinition | undefined = override ?? original;
+  const original = detail?.inherited_types.find(type => type.name === selectedKey);
+  const history = (selectedKey && detail?.history[selectedKey]) || [];
+  const override = history.length > 0 && !history[history.length - 1].restore;
+  const current: PIITypeDefinition | undefined = detail?.effective_types.find(type => type.name === selectedKey);
   const wasOverridden = Boolean(original && override);
 
   const select = (key: string) => {
@@ -90,15 +87,12 @@ export function PolicyLibrary({ activeProfile, onChooseProfile, onBack }: Props)
     setSaving(true);
     setSaveError('');
     try {
-      if (creating || !override) {
-        await addCustomType(nextName, description.trim());
-      } else {
-        await updateCustomType(nextName, nextName, description.trim());
-      }
+      const next = await api.saveScopedVariant(activeProfile, nextName, description.trim(), label.trim());
+      setDetail(next);
       setSelectedKey(nextName);
       setCreating(false);
       setEditing(false);
-      setNotice(original ? 'Variante globale salvata; la definizione originale rimane disponibile.' : 'Definizione personalizzata salvata.');
+      setNotice('Variante del profilo salvata. Gli altri profili e i documenti già importati restano invariati.');
     } catch (cause) {
       setSaveError(cause instanceof Error ? cause.message : 'Impossibile salvare la definizione.');
     } finally {
@@ -107,16 +101,30 @@ export function PolicyLibrary({ activeProfile, onChooseProfile, onBack }: Props)
   };
 
   const restore = async () => {
-    if (!current || !override) return;
-    if (!window.confirm('Ripristinare la definizione originale? La personalizzazione globale sarà eliminata.')) return;
+    if (!selectedKey || !override) return;
+    if (!window.confirm('Ripristinare la definizione ereditata in questo profilo? Le revisioni precedenti resteranno disponibili.')) return;
     setSaving(true);
     setSaveError('');
     try {
-      await removeCustomType(override.name);
-      setNotice('Definizione originale ripristinata.');
+      setDetail(await api.restoreScopedVariant(activeProfile, selectedKey));
+      setNotice('Definizione ereditata ripristinata. La cronologia è conservata.');
       if (!original) setSelectedKey(null);
     } catch (cause) {
       setSaveError(cause instanceof Error ? cause.message : 'Impossibile ripristinare la definizione.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const revertRevision = async (revision: number) => {
+    if (!selectedKey) return;
+    setSaving(true);
+    setSaveError('');
+    try {
+      setDetail(await api.revertScopedVariant(activeProfile, selectedKey, revision));
+      setNotice('Revisione precedente ripristinata come nuova versione, senza cancellare la cronologia.');
+    } catch (cause) {
+      setSaveError(cause instanceof Error ? cause.message : 'Impossibile ripristinare la versione.');
     } finally {
       setSaving(false);
     }
@@ -159,7 +167,7 @@ export function PolicyLibrary({ activeProfile, onChooseProfile, onBack }: Props)
           <p className="mb-3 px-2 text-xs text-on-surface-variant">{definitions.length} definizioni · originali conservati separatamente</p>
           <div className="max-h-[58vh] space-y-1 overflow-y-auto pr-1">
             {definitions.slice(0, visibleCount).map(item => {
-              const custom = customTypes.find(type => type.name === item.name);
+              const isScoped = detail?.origins[item.name] === 'scoped';
               const isSelected = selectedKey === item.name && !creating;
               return (
                 <button type="button" key={item.name} onClick={() => select(item.name)}
@@ -167,10 +175,10 @@ export function PolicyLibrary({ activeProfile, onChooseProfile, onBack }: Props)
                   className={'flex w-full items-start justify-between gap-3 rounded-xl px-3 py-3 text-left transition-colors ' +
                     (isSelected ? 'bg-primary/10 text-on-surface ring-1 ring-primary/30' : 'text-on-surface-variant hover:bg-surface-container-high')}>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium text-on-surface">{custom?.label ?? item.label}</span>
-                    <span className="mt-1 block truncate text-xs">{custom ? 'Personalizzata · globale' : 'Predefinita · qualità non qualificata'}</span>
+                    <span className="block truncate text-sm font-medium text-on-surface">{item.label}</span>
+                    <span className="mt-1 block truncate text-xs">{isScoped ? 'Variante di questo profilo' : detail?.origins[item.name] === 'legacy_global' ? 'Personalizzazione globale precedente' : 'Predefinita · test non qualificati'}</span>
                   </span>
-                  {custom && <Copy size={15} className="shrink-0 text-primary" aria-hidden="true" />}
+                  {isScoped && <Copy size={15} className="shrink-0 text-primary" aria-hidden="true" />}
                 </button>
               );
             })}
@@ -183,7 +191,7 @@ export function PolicyLibrary({ activeProfile, onChooseProfile, onBack }: Props)
         <section className="rg-context-card min-h-0 rounded-2xl p-5 md:p-7">
           {creating || editing ? (
             <div className="max-w-2xl">
-              <p className="mb-2 text-xs text-primary">{creating ? 'Nuova definizione' : original ? 'Variante della definizione originale' : 'Modifica personalizzazione'}</p>
+              <p className="mb-2 text-xs text-primary">{creating ? 'Nuova definizione nel profilo' : original ? 'Variante del profilo' : 'Modifica personalizzazione'}</p>
               <h2 className="mb-6 text-2xl font-semibold">{creating ? 'Cosa vuoi proteggere?' : current?.label}</h2>
               <label className="mb-2 block text-sm font-medium" htmlFor="pii-label">Nome</label>
               <input id="pii-label" value={label} onChange={event => setLabel(event.target.value)} disabled={!creating}
@@ -195,7 +203,7 @@ export function PolicyLibrary({ activeProfile, onChooseProfile, onBack }: Props)
                 <p className="mb-2 text-xs font-medium text-on-surface-variant">Definizione originale · sola lettura</p>
                 <p className="text-sm leading-6">{original.description}</p>
               </div>}
-              <p className="mt-4 text-xs leading-5 text-on-surface-variant">Le personalizzazioni sono attualmente globali e si applicano ai profili contenenti questa chiave. La libreria ufficiale non viene sovrascritta. Il salvataggio non equivale a una validazione della qualità.</p>
+              <p className="mt-4 text-xs leading-5 text-on-surface-variant">Le nuove varianti riguardano soltanto questo profilo. Le personalizzazioni globali già esistenti restano leggibili per compatibilità. Le revisioni sono conservate localmente. Il salvataggio non equivale a validazione della qualità.</p>
               {saveError && <p role="alert" className="mt-4 text-sm text-error">{saveError}</p>}
               <div className="mt-6 flex flex-wrap gap-3">
                 <button type="button" onClick={save} disabled={saving} className="rg-primary-button flex items-center gap-2"><Check size={16} aria-hidden="true" /> {saving ? 'Salvataggio…' : 'Salva definizione'}</button>
@@ -205,7 +213,7 @@ export function PolicyLibrary({ activeProfile, onChooseProfile, onBack }: Props)
           ) : current ? (
             <div className="max-w-2xl">
               <div className="mb-3 flex flex-wrap items-center gap-2">
-                <span className="rounded-full border border-outline-variant px-3 py-1 text-xs text-on-surface-variant">{override ? 'Variante globale' : 'Definizione predefinita'}</span>
+                <span className="rounded-full border border-outline-variant px-3 py-1 text-xs text-on-surface-variant">{override ? 'Variante del profilo' : detail?.origins[current.name] === 'legacy_global' ? 'Personalizzazione globale precedente' : 'Definizione predefinita'}</span>
                 <span className="rounded-full border border-outline-variant px-3 py-1 text-xs text-on-surface-variant">Qualità non qualificata</span>
               </div>
               <h2 className="text-3xl font-semibold tracking-tight">{current.label}</h2>
@@ -220,8 +228,21 @@ export function PolicyLibrary({ activeProfile, onChooseProfile, onBack }: Props)
               </div>}
               <div className="mt-8 flex flex-wrap gap-3">
                 <button type="button" onClick={beginEdit} className="rg-primary-button flex items-center gap-2"><Pencil size={16} aria-hidden="true" /> Personalizza</button>
-                {override && <button type="button" disabled={saving} onClick={restore} className="rg-secondary-button flex items-center gap-2"><RotateCcw size={16} aria-hidden="true" /> {original ? 'Ripristina originale' : 'Elimina definizione'}</button>}
+                {override && <button type="button" disabled={saving} onClick={restore} className="rg-secondary-button flex items-center gap-2"><RotateCcw size={16} aria-hidden="true" /> {original ? 'Ripristina versione ereditata' : 'Disattiva variante'}</button>}
               </div>
+              {history.length > 0 && <section className="mt-8 border-t border-outline-variant/60 pt-5">
+                <h3 className="text-sm font-semibold">Cronologia delle modifiche</h3>
+                <p className="mt-1 text-xs text-on-surface-variant">Ripristinare una revisione crea una nuova voce: la storia resta intatta.</p>
+                <div className="mt-3 space-y-2">
+                  {history.slice(-8).reverse().map(revision => (
+                    <div key={revision.revision} className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-surface-container-low p-3">
+                      <span className="text-sm">v{revision.revision} · {revision.restore ? 'Versione ereditata' : revision.description?.slice(0, 66) || 'Definizione aggiornata'}</span>
+                      <button type="button" disabled={saving} onClick={() => { void revertRevision(revision.revision); }} className="text-xs font-medium text-primary hover:underline">Ripristina</button>
+                    </div>
+                  ))}
+                </div>
+                {history.length > 8 && <p className="mt-3 text-xs text-on-surface-variant">Mostrate le ultime 8 revisioni.</p>}
+              </section>}
               {notice && <p role="status" className="mt-5 text-sm text-success">{notice}</p>}
               {saveError && <p role="alert" className="mt-5 text-sm text-error">{saveError}</p>}
             </div>
