@@ -6,12 +6,19 @@ import { DocumentPanel } from './DocumentPanel';
 import { fieldId } from './reviewIdentity';
 import { reviewReadiness } from './reviewGate';
 
+export interface ReviewDraft {
+  decisions: Record<string, ReviewDecision>;
+  visitedPages: number[];
+}
+
 interface Props {
   state: DocumentState;
   onAnalyzePage: (page: number, force?: boolean) => Promise<void>;
   onBatchAnalyzePages: (pages: number[], force?: boolean) => Promise<void>;
   onApplyRedactions: (decisions: Record<string, ReviewDecision>) => Promise<void>;
   onProceed: () => void;
+  initialDraft?: ReviewDraft;
+  onDraftChange?: (docId: string, draft: ReviewDraft) => void;
 }
 
 interface Group {
@@ -27,16 +34,17 @@ const maskValue = (value: string): string => {
   return value.length <= 4 ? value[0] + '•••' : value.slice(0, 2) + '••••' + value.slice(-2);
 };
 
-export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyRedactions, onProceed }: Props) {
+export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyRedactions, onProceed, initialDraft, onDraftChange }: Props) {
   const [page, setPage] = useState(1);
-  const [decisions, setDecisions] = useState<Record<string, ReviewDecision>>({});
-  const [visitedPages, setVisitedPages] = useState<Set<number>>(new Set());
+  const [decisions, setDecisions] = useState<Record<string, ReviewDecision>>(() => initialDraft?.decisions ?? {});
+  const [visitedPages, setVisitedPages] = useState<Set<number>>(() => new Set(initialDraft?.visitedPages ?? []));
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [visibleGroups, setVisibleGroups] = useState(40);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const resultRef = useRef(state.analysisResults);
+  const decisionsResultRef = useRef(state.analysisResults);
 
   const result = state.analysisResults[page];
   const pageData = state.pages.find(item => item.page_number === page);
@@ -54,6 +62,29 @@ export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyR
       return next;
     });
   }, [state.analysisResults, state.analysisErrors, page]);
+
+  useEffect(() => {
+    if (state.docId) onDraftChange?.(state.docId, { decisions, visitedPages: Array.from(visitedPages) });
+  }, [state.docId, decisions, visitedPages, onDraftChange]);
+
+  // A repeated analysis invalidates prior keep/not_pii decisions for the
+  // changed pages. New suggestions revert to the privacy-safe redact default.
+  useEffect(() => {
+    const prior = decisionsResultRef.current;
+    decisionsResultRef.current = state.analysisResults;
+    const changedPages = Object.entries(state.analysisResults)
+      .filter(([number, result]) => prior[Number(number)] !== result)
+      .map(([number]) => Number(number));
+    if (!changedPages.length) return;
+    setDecisions(previous => {
+      const next = { ...previous };
+      for (const number of changedPages) {
+        for (const field of prior[number]?.pii_fields ?? []) delete next[fieldId(field, number)];
+        for (const field of state.analysisResults[number].pii_fields) next[fieldId(field, number)] = 'redact';
+      }
+      return next;
+    });
+  }, [state.analysisResults]);
 
   // Privacy-safe initial decision: redact every valid model-proposed finding.
   useEffect(() => {

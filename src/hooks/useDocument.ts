@@ -1,19 +1,19 @@
-import { useState, useCallback } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { api } from '../services/api';
-import {
-  DocumentAnalysisSummary,
-  PageAnalysisResult,
-  RedactRequestItem,
-  RedactedPage,
-  UploadResponse,
+import { updateById, validatePdfCandidate, validateSessionCapacity } from './documentQueue';
+import type {
+  DocumentAnalysisSummary, PageAnalysisResult, RedactRequestItem,
+  RedactedPage, UploadResponse,
 } from '../types';
 
 export type AppStep = 'upload' | 'review' | 'export';
 
 export interface DocumentState {
   docId: string | null;
+  filename: string;
   profile: string;
   model: string;
+  policyDigest: string;
   pages: UploadResponse['pages'];
   analysisResults: Record<number, PageAnalysisResult>;
   analysisErrors: Record<number, string>;
@@ -26,10 +26,17 @@ export interface DocumentState {
   analyzedCount: number;
 }
 
-const initialState = (): DocumentState => ({
+export interface ImportError {
+  filename: string;
+  message: string;
+}
+
+const emptyDocument = (): DocumentState => ({
   docId: null,
-  profile: 'healthcare',
+  filename: '',
+  profile: 'general',
   model: '',
+  policyDigest: '',
   pages: [],
   analysisResults: {},
   analysisErrors: {},
@@ -42,200 +49,188 @@ const initialState = (): DocumentState => ({
   analyzedCount: 0,
 });
 
+const fromUpload = (file: File, uploaded: UploadResponse, summary: DocumentAnalysisSummary | null): DocumentState => ({
+  ...emptyDocument(),
+  docId: uploaded.doc_id,
+  filename: file.name,
+  profile: uploaded.profile,
+  model: uploaded.model,
+  policyDigest: uploaded.policy_digest,
+  pages: uploaded.pages,
+  summary,
+});
+
+/**
+ * Canonical document/session owner in the frontend. Backend sessions remain
+ * independent by doc_id; one failed PDF never becomes a successful empty document.
+ */
 export function useDocument() {
-  const [step, setStep] = useState<AppStep>('upload');
-  const [state, setState] = useState<DocumentState>(initialState);
+  const [byId, setById] = useState<Record<string, DocumentState>>({});
+  const [order, setOrder] = useState<string[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importingFile, setImportingFile] = useState('');
+  const [importErrors, setImportErrors] = useState<ImportError[]>([]);
+  const importing = useRef(false);
+  const active = activeId ? byId[activeId] : undefined;
+  const state = active ?? emptyDocument();
 
-  const refreshSummary = async (docId: string) => {
+  const update = useCallback((docId: string, apply: (state: DocumentState) => DocumentState) => {
+    setById(previous => updateById(previous, docId, apply));
+  }, []);
+
+  const refreshSummary = useCallback(async (docId: string) => {
     const summary = await api.getAnalysisSummary(docId);
-    setState(prev => ({ ...prev, summary }));
+    update(docId, previous => ({ ...previous, summary }));
     return summary;
-  };
+  }, [update]);
 
-  const upload = async (file: File, profile: string) => {
-    try {
-      setState({
-        ...initialState(),
-        isUploading: true,
-        profile,
-      });
-
-      const uploadRes = await api.upload(file, profile);
-      let summary: DocumentAnalysisSummary | null = null;
-      try {
-        summary = await api.getAnalysisSummary(uploadRes.doc_id);
-      } catch (summaryError) {
-        console.warn('Initial analysis summary unavailable:', summaryError);
-      }
-
-      setState(prev => ({
-        ...prev,
-        docId: uploadRes.doc_id,
-        profile: uploadRes.profile,
-        model: uploadRes.model,
-        pages: uploadRes.pages,
-        summary,
-        isUploading: false,
-      }));
-      setStep('review');
-    } catch (err) {
-      console.error('Upload failed:', err);
-      setState(prev => ({ ...prev, isUploading: false }));
-      throw err;
+  const uploadFiles = useCallback(async (files: File[], profile: string) => {
+    if (importing.current) return { added: 0, errors: [{ filename: '', message: 'Importazione già in corso.' }] };
+    const capacityError = validateSessionCapacity(order.length, files.length);
+    if (capacityError) {
+      const errors = [{ filename: '', message: capacityError }];
+      setImportErrors(errors);
+      return { added: 0, errors };
     }
-  };
+    importing.current = true;
+    setIsImporting(true);
+    setImportErrors([]);
+    const errors: ImportError[] = [];
+    const ids: string[] = [];
+    try {
+      // Bounded sequential upload: existing local API creates one independent
+      // backend document session per PDF. This is NOT fake client-side batch inference.
+      for (const file of files) {
+        setImportingFile(file.name);
+        const validation = validatePdfCandidate(file);
+        if (validation) {
+          errors.push({ filename: file.name, message: validation });
+          continue;
+        }
+        try {
+          const uploaded = await api.upload(file, profile);
+          let summary: DocumentAnalysisSummary | null = null;
+          try {
+            summary = await api.getAnalysisSummary(uploaded.doc_id);
+          } catch {
+            // Missing summary does not mean a successful analysis.
+          }
+          setById(previous => ({
+            ...previous,
+            [uploaded.doc_id]: fromUpload(file, uploaded, summary),
+          }));
+          setOrder(previous => [...previous, uploaded.doc_id]);
+          ids.push(uploaded.doc_id);
+        } catch (cause) {
+          errors.push({
+            filename: file.name,
+            message: cause instanceof Error ? cause.message : 'Importazione non riuscita.',
+          });
+        }
+      }
+      if (ids.length) setActiveId(ids[0]);
+      setImportErrors(errors);
+      return { added: ids.length, errors };
+    } finally {
+      importing.current = false;
+      setIsImporting(false);
+      setImportingFile('');
+    }
+  }, [order.length]);
 
-  const analyzePage = async (pageNumber: number, force: boolean = false) => {
-    const docId = state.docId;
+  const upload = useCallback(async (file: File, profile: string) => {
+    const result = await uploadFiles([file], profile);
+    if (result.errors.length) throw new Error(result.errors[0].message);
+  }, [uploadFiles]);
+
+  const analyzePage = async (pageNumber: number, force = false) => {
+    const docId = activeId;
     if (!docId) return;
-
-    setState(prev => {
-      const nextErrors = { ...prev.analysisErrors };
-      delete nextErrors[pageNumber];
-      return {
-        ...prev,
-        isAnalyzing: true,
-        currentAnalyzingPage: pageNumber,
-        analysisErrors: nextErrors,
-      };
+    update(docId, previous => {
+      const errors = { ...previous.analysisErrors };
+      delete errors[pageNumber];
+      return { ...previous, isAnalyzing: true, currentAnalyzingPage: pageNumber, analysisErrors: errors };
     });
-
     try {
       const result = await api.analyzePage(docId, pageNumber, force);
-      setState(prev => {
-        const isNew = !prev.analysisResults[pageNumber];
-        return {
-          ...prev,
-          analyzedCount: isNew ? prev.analyzedCount + 1 : prev.analyzedCount,
-          analysisResults: {
-            ...prev.analysisResults,
-            [pageNumber]: result,
-          },
-        };
-      });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.error(`Error analyzing page ${pageNumber}:`, err);
-      setState(prev => ({
-        ...prev,
+      update(docId, previous => ({
+        ...previous,
+        analyzedCount: previous.analyzedCount + (previous.analysisResults[pageNumber] ? 0 : 1),
+        analysisResults: { ...previous.analysisResults, [pageNumber]: result },
+        redactedPages: [],
+      }));
+    } catch (cause) {
+      update(docId, previous => ({
+        ...previous,
         analysisErrors: {
-          ...prev.analysisErrors,
-          [pageNumber]: message,
+          ...previous.analysisErrors,
+          [pageNumber]: cause instanceof Error ? cause.message : 'Analisi non riuscita.',
         },
       }));
     } finally {
-      try {
-        await refreshSummary(docId);
-      } catch (summaryError) {
-        console.warn('Could not refresh analysis summary:', summaryError);
-      }
-      setState(prev => ({
-        ...prev,
-        isAnalyzing: false,
-        currentAnalyzingPage: null,
-      }));
+      try { await refreshSummary(docId); } catch { /* failure remains explicit in state */ }
+      update(docId, previous => ({ ...previous, isAnalyzing: false, currentAnalyzingPage: null }));
     }
   };
 
-  const batchAnalyzePages = async (
-    pageNumbers: number[],
-    force: boolean = false,
-  ) => {
-    const docId = state.docId;
+  const batchAnalyzePages = async (pageNumbers: number[], force = false) => {
+    const docId = activeId;
     if (!docId) return;
-
-    setState(prev => ({
-      ...prev,
-      isAnalyzing: true,
-      pendingPages: [...pageNumbers],
-    }));
-
-    for (const pageNum of pageNumbers) {
-      setState(prev => {
-        const nextErrors = { ...prev.analysisErrors };
-        delete nextErrors[pageNum];
+    update(docId, previous => ({ ...previous, isAnalyzing: true, pendingPages: [...pageNumbers] }));
+    for (const pageNumber of pageNumbers) {
+      update(docId, previous => {
+        const errors = { ...previous.analysisErrors };
+        delete errors[pageNumber];
         return {
-          ...prev,
-          currentAnalyzingPage: pageNum,
-          pendingPages: prev.pendingPages.filter(p => p !== pageNum),
-          analysisErrors: nextErrors,
+          ...previous,
+          currentAnalyzingPage: pageNumber,
+          pendingPages: previous.pendingPages.filter(number => number !== pageNumber),
+          analysisErrors: errors,
         };
       });
-
       try {
-        const result = await api.analyzePage(docId, pageNum, force);
-        setState(prev => {
-          const isNew = !prev.analysisResults[pageNum];
-          return {
-            ...prev,
-            analyzedCount: isNew ? prev.analyzedCount + 1 : prev.analyzedCount,
-            analysisResults: {
-              ...prev.analysisResults,
-              [pageNum]: result,
-            },
-          };
-        });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        console.error(`Error in batch analysis for page ${pageNum}:`, err);
-        setState(prev => ({
-          ...prev,
+        const result = await api.analyzePage(docId, pageNumber, force);
+        update(docId, previous => ({
+          ...previous,
+          analyzedCount: previous.analyzedCount + (previous.analysisResults[pageNumber] ? 0 : 1),
+          analysisResults: { ...previous.analysisResults, [pageNumber]: result },
+        redactedPages: [],
+        }));
+      } catch (cause) {
+        update(docId, previous => ({
+          ...previous,
           analysisErrors: {
-            ...prev.analysisErrors,
-            [pageNum]: message,
+            ...previous.analysisErrors,
+            [pageNumber]: cause instanceof Error ? cause.message : 'Analisi non riuscita.',
           },
         }));
       }
-
-      try {
-        await refreshSummary(docId);
-      } catch (summaryError) {
-        console.warn('Could not refresh analysis summary:', summaryError);
-      }
+      try { await refreshSummary(docId); } catch { /* no fabricated success status */ }
     }
-
-    setState(prev => ({
-      ...prev,
-      isAnalyzing: false,
-      currentAnalyzingPage: null,
-      pendingPages: [],
-    }));
+    update(docId, previous => ({ ...previous, isAnalyzing: false, currentAnalyzingPage: null, pendingPages: [] }));
   };
 
-  const applyRedactions = async (fieldsToRedact: RedactRequestItem[]) => {
-    const docId = state.docId;
+  const applyRedactions = async (decisions: RedactRequestItem[]) => {
+    const docId = activeId;
     if (!docId) return;
-    try {
-      const res = await api.redact(docId, fieldsToRedact);
-      setState(prev => ({
-        ...prev,
-        redactedPages: res.redacted_pages,
-      }));
-      try {
-        await refreshSummary(docId);
-      } catch (summaryError) {
-        console.warn('Could not refresh decision summary:', summaryError);
-      }
-    } catch (err) {
-      console.error('Redaction failed:', err);
-      throw err;
-    }
+    const result = await api.redact(docId, decisions);
+    update(docId, previous => ({ ...previous, redactedPages: result.redacted_pages }));
+    try { await refreshSummary(docId); } catch { /* keep previous safe summary */ }
   };
 
   const reset = useCallback(() => {
-    setStep('upload');
-    setState(initialState());
+    setById({});
+    setOrder([]);
+    setActiveId(null);
+    setImportErrors([]);
   }, []);
 
   return {
-    step,
-    setStep,
     state,
-    upload,
-    analyzePage,
-    batchAnalyzePages,
-    applyRedactions,
-    refreshSummary,
-    reset,
+    documents: order.map(id => byId[id]).filter((item): item is DocumentState => Boolean(item)),
+    activeId, selectDocument: setActiveId,
+    upload, uploadFiles, importingFile, isImporting, importErrors,
+    analyzePage, batchAnalyzePages, applyRedactions, refreshSummary, reset,
   };
 }

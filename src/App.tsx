@@ -8,6 +8,7 @@ import { PolicyLibrary } from './components/workspace/PolicyLibrary';
 import { ModelCenter } from './components/workspace/ModelCenter';
 import { PrivacyPanel } from './components/workspace/PrivacyPanel';
 import { ReviewStep } from './components/review/ReviewStep';
+import type { ReviewDraft } from './components/review/ReviewStep';
 import { ExportStep } from './components/export/ExportStep';
 import type { HealthResponse, ReviewDecision } from './types';
 
@@ -20,7 +21,8 @@ const initialProfile = (): string => {
 };
 
 export default function App() {
-  const { state, upload, analyzePage, batchAnalyzePages, applyRedactions, reset } = useDocument();
+  const { state, documents, activeId, selectDocument, uploadFiles, importingFile, isImporting, importErrors,
+    analyzePage, batchAnalyzePages, applyRedactions, reset } = useDocument();
   const { profiles } = useProfiles();
   const [screen, setScreen] = useState<Screen>('home');
   const [activeProfile, setActiveProfile] = useState(initialProfile);
@@ -28,6 +30,7 @@ export default function App() {
   const [runtime, setRuntime] = useState<RuntimePhase>('starting');
   const [healthRequest, setHealthRequest] = useState(0);
   const [privacyNotice, setPrivacyNotice] = useState('');
+  const [reviewDrafts, setReviewDrafts] = useState<Record<string, ReviewDraft>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -63,13 +66,18 @@ export default function App() {
   const discardDocument = () => {
     if (state.docId && !window.confirm('Chiudere il documento corrente? La sessione di revisione non sarà più disponibile in questa finestra.')) return;
     reset();
+    setReviewDrafts({});
     setScreen('home');
   };
-  const importFile = async (file: File) => {
-    if (state.docId && !window.confirm('Importare un nuovo PDF e sostituire la sessione corrente?')) return;
-    await upload(file, activeProfile);
-    setScreen('review');
+  const importFiles = async (files: File[]) => {
+    const outcome = await uploadFiles(files, activeProfile);
+    if (outcome.added) setScreen('review');
+    return outcome;
   };
+
+  const saveDraft = useCallback((docId: string, draft: ReviewDraft) => {
+    setReviewDrafts(previous => ({ ...previous, [docId]: draft }));
+  }, []);
   const applyAndExport = async (decisions: Record<string, ReviewDecision>) => {
     if (!state.docId) return;
     await applyRedactions(Object.entries(decisions).map(([field_id, decision]) => ({ field_id, decision })));
@@ -114,7 +122,7 @@ export default function App() {
       </header>
       {state.docId && screen !== 'review' && screen !== 'export' && (
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-outline-variant/40 bg-surface-container-low px-5 py-2 text-sm lg:px-9">
-          <span className="truncate text-on-surface-variant">Documento aperto · {state.summary?.filename ?? 'Sessione in corso'} · policy {state.profile}</span>
+          <span className="truncate text-on-surface-variant">Sessione in corso · {documents.length} PDF · policy del documento selezionato: {state.profile}</span>
           <div className="flex gap-3"><button type="button" onClick={openReview} className="font-medium text-primary">Riprendi revisione</button><button type="button" onClick={discardDocument} className="text-on-surface-variant hover:text-on-surface">Chiudi</button></div>
         </div>
       )}
@@ -122,8 +130,9 @@ export default function App() {
         profileLabel={activeLabel}
         modelName={health?.model ?? 'Non disponibile'}
         runtimeReady={runtime === 'ready'}
-        busy={state.isUploading}
-        onImport={importFile}
+        busy={isImporting}
+        importingFile={importingFile}
+        onImport={importFiles}
         onPolicy={() => setScreen('policy')}
         onModel={() => setScreen('models')}
       />}
@@ -141,10 +150,42 @@ export default function App() {
             </div>
           </div>
           {runtime !== 'ready' && <p role="status" className="border-b border-warning/30 bg-warning/5 px-6 py-3 text-sm text-warning">Korgis non è pronto: puoi consultare il documento, ma l'analisi richiede un modello locale residente. <button type="button" className="underline" onClick={() => setScreen('models')}>Dettagli</button></p>}
-          <ReviewStep state={state} onAnalyzePage={analyzePage} onBatchAnalyzePages={batchAnalyzePages} onApplyRedactions={applyAndExport} onProceed={() => setScreen('export')} />
+          {importErrors.length > 0 && <div role="alert" className="border-b border-warning/30 bg-warning/5 px-5 py-3 text-sm text-warning lg:px-9">
+            {importErrors.length} {importErrors.length === 1 ? 'file non importato' : 'file non importati'}: {importErrors.map(item => item.filename || item.message).join(', ')}. Nessun file viene considerato elaborato se l'import è fallito.
+          </div>}
+          <div className={'grid min-h-0 flex-1 gap-3 ' + (documents.length > 1 ? 'lg:grid-cols-[220px_minmax(0,1fr)]' : '')}>
+            {documents.length > 1 && <aside aria-label="Documenti della sessione" className="border-b border-outline-variant/50 bg-surface-container-lowest px-3 py-4 lg:border-b-0 lg:border-r">
+              <div className="mb-4 px-2 text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Documenti ({documents.length})</div>
+              <div className="max-h-[72vh] space-y-1 overflow-y-auto">
+                {documents.map(item => (
+                  <button key={item.docId} type="button" onClick={() => {
+                    selectDocument(item.docId);
+                    setScreen('review');
+                  }} aria-current={item.docId === activeId ? 'true' : undefined}
+                    className={'w-full rounded-xl border px-3 py-3 text-left text-sm ' +
+                      (item.docId === activeId ? 'border-primary/50 bg-primary/10 text-on-surface' : 'border-transparent text-on-surface-variant hover:bg-surface-container-high')}>
+                    <span className="block truncate font-medium">{item.filename}</span>
+                    <span className="mt-1 block text-xs">{item.summary?.analysis_status === 'complete' ? 'Analizzato' : item.summary?.analysis_status === 'failed' ? 'Analisi fallita' : item.summary?.analysis_status === 'needs_attention' ? 'Richiede attenzione' : item.isAnalyzing ? 'In analisi' : 'Da verificare'}</span>
+                  </button>
+                ))}
+              </div>
+            </aside>}
+            <div key={state.docId} className="flex min-w-0 flex-col">
+            <ReviewStep state={state}
+              initialDraft={state.docId ? reviewDrafts[state.docId] : undefined}
+              onDraftChange={saveDraft}
+              onAnalyzePage={analyzePage} onBatchAnalyzePages={batchAnalyzePages}
+              onApplyRedactions={applyAndExport} onProceed={() => { if (state.docId) selectDocument(state.docId); setScreen('export'); }} />
+            </div>
+          </div>
         </main>
       )}
-      {screen === 'export' && state.docId && <main className="flex-1 px-4 py-8"><ExportStep state={state} onReset={discardDocument} /></main>}
+      {screen === 'export' && state.docId && <main className="flex-1 px-4 py-8">
+        <div key={state.docId}><ExportStep state={state} onReset={() => {
+          if (documents.length > 1) setScreen('review');
+          else discardDocument();
+        }} onResetLabel={documents.length > 1 ? 'Torna ai documenti' : 'Nuovo documento'} /></div>
+      </main>}
       <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-outline-variant/40 px-6 py-4 text-xs text-on-surface-variant lg:px-10">
         <span className="flex items-center gap-2"><LockKeyhole size={14} aria-hidden="true" /> AI e documenti sul dispositivo · revisione umana necessaria</span>
         <span>PDF in ingresso · Markdown protetto in uscita</span>

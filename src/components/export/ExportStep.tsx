@@ -7,9 +7,10 @@ import { ClientProtectionReport } from './ClientProtectionReport';
 interface ExportStepProps {
   state: DocumentState;
   onReset: () => void;
+  onResetLabel?: string;
 }
 
-export function ExportStep({ state, onReset }: ExportStepProps) {
+export function ExportStep({ state, onReset, onResetLabel = 'Nuovo documento' }: ExportStepProps) {
   const [copied, setCopied] = useState(false);
   const [showClientReport, setShowClientReport] = useState(false);
   
@@ -35,7 +36,7 @@ export function ExportStep({ state, onReset }: ExportStepProps) {
     document.body.removeChild(a);
   };
 
-  const combinedText = state.redactedPages
+  const combinedText = [...state.redactedPages]
     .sort((a, b) => a.page_number - b.page_number)
     .map(p => p.text)
     .join('\n\n---\n\n');
@@ -178,7 +179,7 @@ export function ExportStep({ state, onReset }: ExportStepProps) {
             className="flex items-center gap-2 px-5 py-3 text-on-surface-variant font-semibold hover:text-on-surface transition-colors"
           >
             <RotateCcw className="w-4 h-4" />
-            Start over
+            {onResetLabel}
           </button>
         </div>
       </div>

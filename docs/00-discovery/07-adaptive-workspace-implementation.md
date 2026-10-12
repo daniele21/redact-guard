@@ -82,3 +82,19 @@ This is a bounded subset of issue #11, not yet the complete hardware-aware Model
 Risk note: Korgis uses an opt-in administrative API without automatic authentication; this integration intentionally uses the public discovery and inference APIs instead. Never enable the admin API solely to make the product selector richer. Tauri/macOS app packaging and physical evidence remain separately pending.
 
 Validation: STRONG for persistence, session snapshots and cache identity; CI Python tests and TypeScript/build are necessary but cannot replace real runtime integration evidence.
+
+## Multi-PDF incremental workspace (stacked, 2026-10-12)
+
+The existing in-memory backend session store is already keyed by independent `doc_id` values. The frontend now reuses that owner rather than creating an additional server-side registry.
+
+- One import action accepts 1–25 PDFs, uploaded sequentially to avoid uncontrolled simultaneous conversion/model work.
+- Each returned `doc_id` has independent pages, analysis/error/status, frozen model and policy, redactions and per-document review draft.
+- Document switch preserves reviewer choices and inspected pages in the current application session. Re-analysis clears prior decisions on affected pages and invalidates the previous protected output.
+- Unsupported or oversized inputs are rejected with per-file messages; successfully imported files remain accessible after another file fails. No failed file is silently counted as imported or protected.
+- Navigation supports a list of up to 25 PDFs in a single application session. Export remains explicit for the active document only, with the same fail-closed UI readiness gate and human confirmation.
+- No batch ZIP/output claim, no persistent job ledger, and no resumable queue after restarting the app. Expired backend sessions return errors rather than being considered complete.
+- This is frontend aggregation of real backend single-PDF sessions, not an independent backend batch inference API or a new execution engine.
+
+**Still pending for issue #12:** backend-enforced review attestation / export readiness (client gate alone is insufficient), session cleanup API and lifecycle under cancellation, representative memory/large-PDF benchmarks, realistic Tauri device E2E and optional explicitly requested partial batch export behavior.
+
+Automated proof: bounded candidate/session tests and per-document state isolation, plus existing static/frontend/backend/sidecar CI. Full session-switch UX evidence requires browser/Tauri interaction testing.
