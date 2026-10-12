@@ -1,11 +1,9 @@
-import json
-import urllib.request
-
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from config import config
 from cache.cache_manager import cache_manager
+from config import config
+from services.korgis_client import KorgisRuntimeAdapter
 from services.model_selection import get_selected_model
 
 router = APIRouter()
@@ -15,44 +13,38 @@ class HealthResponse(BaseModel):
     status: str
     llm_status: str
     model: str
+    korgis_mode: str
     korgis_protocol_version: str | None = None
+    korgis_compatibility: str | None = None
+    korgis_request_evidence_supported: bool = False
     cache_stats: dict
-
-
-def _get_json(url: str, timeout: float = 2.0) -> dict:
-    req = urllib.request.Request(
-        url,
-        headers={"Content-Type": "application/json"},
-        method="GET",
-    )
-    with urllib.request.urlopen(req, timeout=timeout) as response:
-        return json.loads(response.read().decode("utf-8"))
 
 
 @router.get("/health", response_model=HealthResponse)
 def health_check():
-    """Report backend health and the configured model's readiness in Korgis."""
+    """Report backend health and Korgis compatibility/readiness."""
     selected_model = get_selected_model()
     llm_status = "offline"
     protocol_version = None
+    compatibility_status = None
+    request_evidence_supported = False
 
     try:
-        models_payload = _get_json(f"{config.korgis_base_url}/models")
-        resident: set[str] = set()
-        for item in models_payload.get("data", []):
-            for key in ("key", "id"):
-                value = item.get(key)
-                if value:
-                    resident.add(str(value))
-
-        identity_payload = _get_json(f"{config.korgis_base_url}/runtime/identity")
-        protocol_version = identity_payload.get("protocol_version")
-        identity_models = identity_payload.get("models") or {}
-
-        if selected_model in resident or selected_model in identity_models:
-            llm_status = "online"
+        compatibility = KorgisRuntimeAdapter(model=selected_model, timeout=2.0).compatibility()
+        protocol_version = compatibility.identity_protocol
+        compatibility_status = compatibility.status
+        request_evidence_supported = compatibility.request_evidence_supported
+        if (
+            config.korgis_mode == "managed"
+            and compatibility.status != "compatible"
+        ):
+            llm_status = "runtime_incompatible"
         else:
-            llm_status = "model_not_resident"
+            llm_status = (
+                "online"
+                if compatibility.model_resident
+                else "model_not_resident"
+            )
     except Exception:
         llm_status = "offline"
 
@@ -60,6 +52,9 @@ def health_check():
         status="ok",
         llm_status=llm_status,
         model=selected_model,
+        korgis_mode=config.korgis_mode,
         korgis_protocol_version=protocol_version,
+        korgis_compatibility=compatibility_status,
+        korgis_request_evidence_supported=request_evidence_supported,
         cache_stats=cache_manager.get_stats(),
     )
