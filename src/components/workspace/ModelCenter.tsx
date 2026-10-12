@@ -81,6 +81,18 @@ export function ModelCenter({ health, onBack, onRetry }: Props) {
         </div>
       </section>
 
+      <section className="mt-5 rounded-2xl border border-outline-variant/60 bg-surface-container-low/60 p-5" aria-label="Hardware dichiarato dal runtime">
+        <div className="mb-3 flex items-center gap-2"><Cpu size={17} className="text-primary" aria-hidden="true" /><h2 className="text-sm font-semibold">Il tuo hardware · fonte Korgis</h2></div>
+        {catalog?.hardware ? (
+          <div className="grid gap-3 text-sm sm:grid-cols-3">
+            <div><div className="text-xs text-on-surface-variant">Sistema</div><div className="mt-1">{[catalog.hardware.system, catalog.hardware.machine].filter(Boolean).join(' · ') || 'Non disponibile'}</div></div>
+            <div><div className="text-xs text-on-surface-variant">CPU logiche</div><div className="mt-1">{catalog.hardware.logical_cpus ?? 'Non disponibile'}</div></div>
+            <div><div className="text-xs text-on-surface-variant">Memoria totale rilevata</div><div className="mt-1">{catalog.hardware.total_memory_bytes ? (catalog.hardware.total_memory_bytes / 1024 ** 3).toFixed(1) + ' GiB' : 'Non disponibile'}</div></div>
+          </div>
+        ) : <p className="text-sm text-on-surface-variant">Identità hardware non disponibile dal runtime corrente.</p>}
+        <p className="mt-3 text-xs text-on-surface-variant">Questi sono dati identificativi del computer restituiti dal runtime, non requisiti minimi o benchmark del modello.</p>
+      </section>
+
       <div className="mt-8 flex flex-wrap items-center justify-between gap-4">
         <div>
           <h2 className="text-xl font-semibold">Modelli disponibili ora</h2>
