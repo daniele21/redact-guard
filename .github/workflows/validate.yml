@@ -206,3 +206,47 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
+
+  adaptive-browser-smoke:
+    name: Adaptive Workspace browser smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install pinned browser harness outside the application
+        run: |
+          npm install --prefix /tmp/redactguard-playwright --no-save --ignore-scripts playwright@1.56.1
+          node /tmp/redactguard-playwright/node_modules/playwright/cli.js install --with-deps chromium
+      - name: Start Vite with synthetic intercepted API
+        shell: bash
+        run: |
+          pnpm dev --host 127.0.0.1 > /tmp/redactguard-vite.log 2>&1 &
+          echo $! > /tmp/redactguard-vite.pid
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:3000 >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/redactguard-vite.log
+          exit 1
+      - name: Verify real rendered flows and capture reference images
+        run: node scripts/smoke-adaptive-ui.mjs
+      - name: Upload synthetic desktop UX captures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: adaptive-workspace-browser-captures
+          path: artifacts/adaptive-ux/*.png
+          retention-days: 7
+          if-no-files-found: warn
+      - name: Stop browser harness processes
+        if: always()
+        shell: bash
+        run: |
+          if test -f /tmp/redactguard-vite.pid; then
+            kill "$(cat /tmp/redactguard-vite.pid)" || true
+          fi
