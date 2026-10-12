@@ -13,6 +13,7 @@ export type AppStep = 'upload' | 'review' | 'export';
 export interface DocumentState {
   docId: string | null;
   profile: string;
+  model: string;
   pages: UploadResponse['pages'];
   analysisResults: Record<number, PageAnalysisResult>;
   analysisErrors: Record<number, string>;
@@ -28,6 +29,7 @@ export interface DocumentState {
 const initialState = (): DocumentState => ({
   docId: null,
   profile: 'healthcare',
+  model: '',
   pages: [],
   analysisResults: {},
   analysisErrors: {},
@@ -70,6 +72,7 @@ export function useDocument() {
         ...prev,
         docId: uploadRes.doc_id,
         profile: uploadRes.profile,
+        model: uploadRes.model,
         pages: uploadRes.pages,
         summary,
         isUploading: false,
