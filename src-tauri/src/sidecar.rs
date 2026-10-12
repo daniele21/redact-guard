@@ -1,3 +1,4 @@
+use std::env;
 use std::path::PathBuf;
 use std::time::Duration;
 use tauri::{AppHandle, Manager};
@@ -7,7 +8,43 @@ use tauri_plugin_shell::ShellExt;
 use crate::SidecarState;
 
 const HEALTH_CHECK_INTERVAL: Duration = Duration::from_millis(500);
-const HEALTH_CHECK_TIMEOUT: Duration = Duration::from_secs(60);
+const API_HEALTH_CHECK_TIMEOUT: Duration = Duration::from_secs(60);
+const DEFAULT_KORGIS_STARTUP_TIMEOUT: Duration = Duration::from_secs(900);
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum KorgisMode {
+    External,
+    Managed,
+}
+
+impl KorgisMode {
+    fn from_env() -> Result<Self, String> {
+        let default_mode = if cfg!(debug_assertions) {
+            "external"
+        } else {
+            "managed"
+        };
+        match env::var("KORGIS_MODE")
+            .unwrap_or_else(|_| default_mode.to_string())
+            .trim()
+            .to_ascii_lowercase()
+            .as_str()
+        {
+            "external" => Ok(Self::External),
+            "managed" => Ok(Self::Managed),
+            value => Err(format!(
+                "Unsupported KORGIS_MODE={value}; expected external or managed"
+            )),
+        }
+    }
+
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::External => "external",
+            Self::Managed => "managed",
+        }
+    }
+}
 
 fn project_root(handle: &AppHandle) -> PathBuf {
     if cfg!(debug_assertions) {
@@ -23,11 +60,45 @@ fn project_root(handle: &AppHandle) -> PathBuf {
     }
 }
 
-/// Start only the RedactGuard FastAPI backend.
+/// Start RedactGuard and, when explicitly configured, its managed Korgis process.
 ///
-/// Korgis is an external local runtime and owns model lifecycle/inference. Tauri must not
-/// spawn a second LLM process or download a duplicate model artifact.
+/// Korgis stays a separate process and remains the owner of model acquisition,
+/// model lifecycle, inference and resource telemetry.
 pub async fn start_backend(handle: &AppHandle) -> Result<(), String> {
+    let mode = KorgisMode::from_env()?;
+    let model = env::var("KORGIS_MODEL").unwrap_or_else(|_| "nemotron-nano-4b".to_string());
+
+    let korgis_base_url = match mode {
+        KorgisMode::External => {
+            env::var("KORGIS_BASE_URL").unwrap_or_else(|_| "http://127.0.0.1:1235/v1".to_string())
+        }
+        KorgisMode::Managed => {
+            let port = portpicker::pick_unused_port().ok_or_else(|| {
+                "Could not allocate a loopback port for managed Korgis".to_string()
+            })?;
+            {
+                let state = handle.state::<SidecarState>();
+                *state.korgis_port.lock().unwrap() = Some(port);
+            }
+
+            log::info!(
+                "Starting managed Korgis on port {} with model {}",
+                port,
+                model
+            );
+            start_korgis_server(handle, port, &model).await?;
+            let root_url = format!("http://127.0.0.1:{port}");
+            wait_for_http_health(
+                &format!("{root_url}/health"),
+                managed_korgis_startup_timeout(),
+                "Korgis",
+            )
+            .await?;
+            log::info!("Managed Korgis is ready on port {}", port);
+            format!("{root_url}/v1")
+        }
+    };
+
     let api_port = if cfg!(debug_assertions) {
         8000u16
     } else {
@@ -38,14 +109,83 @@ pub async fn start_backend(handle: &AppHandle) -> Result<(), String> {
     *state.api_port.lock().unwrap() = api_port;
 
     log::info!("Starting RedactGuard API server on port {}", api_port);
-    start_api_server(handle, api_port).await?;
-    wait_for_health(api_port).await?;
+    start_api_server(handle, api_port, mode, &korgis_base_url, &model).await?;
+    wait_for_http_health(
+        &format!("http://127.0.0.1:{api_port}/api/health"),
+        API_HEALTH_CHECK_TIMEOUT,
+        "RedactGuard backend",
+    )
+    .await?;
     log::info!("RedactGuard backend is ready on port {}", api_port);
 
     Ok(())
 }
 
-async fn start_api_server(handle: &AppHandle, port: u16) -> Result<(), String> {
+async fn start_korgis_server(handle: &AppHandle, port: u16, model: &str) -> Result<(), String> {
+    let root = project_root(handle);
+    let port_str = port.to_string();
+
+    let command = if cfg!(debug_assertions) {
+        let python = env::var("KORGIS_PYTHON")
+            .map_err(|_| "Managed Korgis development mode requires KORGIS_PYTHON".to_string())?;
+        handle
+            .shell()
+            .command(python)
+            .args([
+                "-m",
+                "local_llm_server",
+                "serve",
+                "--host",
+                "127.0.0.1",
+                "--port",
+                &port_str,
+                "--model",
+                model,
+                "--enable-admin-api",
+            ])
+            .current_dir(&root)
+    } else {
+        handle
+            .shell()
+            .sidecar("redactguard-server")
+            .map_err(|e| format!("Failed to create Korgis launcher sidecar: {e}"))?
+            .args(["korgis", "--port", &port_str, "--model", model])
+    };
+
+    let (mut rx, child) = command
+        .spawn()
+        .map_err(|e| format!("Failed to spawn managed Korgis: {e}"))?;
+
+    tauri::async_runtime::spawn(async move {
+        while let Some(event) = rx.recv().await {
+            match event {
+                CommandEvent::Stdout(line) => {
+                    log::info!("[Korgis] {}", String::from_utf8_lossy(&line));
+                }
+                CommandEvent::Stderr(line) => {
+                    log::warn!("[Korgis] {}", String::from_utf8_lossy(&line));
+                }
+                CommandEvent::Terminated(payload) => {
+                    log::info!("[Korgis] Process terminated: {:?}", payload);
+                    break;
+                }
+                _ => {}
+            }
+        }
+    });
+
+    let state = handle.state::<SidecarState>();
+    *state.korgis_child.lock().unwrap() = Some(child);
+    Ok(())
+}
+
+async fn start_api_server(
+    handle: &AppHandle,
+    port: u16,
+    mode: KorgisMode,
+    korgis_base_url: &str,
+    model: &str,
+) -> Result<(), String> {
     let root = project_root(handle);
     let port_str = port.to_string();
 
@@ -68,17 +208,23 @@ async fn start_api_server(handle: &AppHandle, port: u16) -> Result<(), String> {
             ])
             .current_dir(&root)
             .env("REDACTGUARD_DEV", "1")
+            .env("KORGIS_MODE", mode.as_str())
+            .env("KORGIS_BASE_URL", korgis_base_url)
+            .env("KORGIS_MODEL", model)
     } else {
         handle
             .shell()
             .sidecar("redactguard-server")
-            .map_err(|e| format!("Failed to create API sidecar: {}", e))?
+            .map_err(|e| format!("Failed to create API sidecar: {e}"))?
             .args(["api", "--port", &port_str])
+            .env("KORGIS_MODE", mode.as_str())
+            .env("KORGIS_BASE_URL", korgis_base_url)
+            .env("KORGIS_MODEL", model)
     };
 
     let (mut rx, child) = sidecar_cmd
         .spawn()
-        .map_err(|e| format!("Failed to spawn RedactGuard API server: {}", e))?;
+        .map_err(|e| format!("Failed to spawn RedactGuard API server: {e}"))?;
 
     tauri::async_runtime::spawn(async move {
         while let Some(event) = rx.recv().await {
@@ -103,19 +249,29 @@ async fn start_api_server(handle: &AppHandle, port: u16) -> Result<(), String> {
     Ok(())
 }
 
-async fn wait_for_health(port: u16) -> Result<(), String> {
+async fn wait_for_http_health(url: &str, timeout: Duration, label: &str) -> Result<(), String> {
     let client = reqwest::Client::new();
-    let url = format!("http://127.0.0.1:{}/api/health", port);
     let start = std::time::Instant::now();
 
     loop {
-        if start.elapsed() > HEALTH_CHECK_TIMEOUT {
-            return Err("Backend health check timed out after 60s".to_string());
+        if start.elapsed() > timeout {
+            return Err(format!(
+                "{label} health check timed out after {}s",
+                timeout.as_secs()
+            ));
         }
 
-        match client.get(&url).send().await {
+        match client.get(url).send().await {
             Ok(resp) if resp.status().is_success() => return Ok(()),
             _ => tokio::time::sleep(HEALTH_CHECK_INTERVAL).await,
         }
     }
+}
+
+fn managed_korgis_startup_timeout() -> Duration {
+    env::var("KORGIS_STARTUP_TIMEOUT_SECONDS")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .map(Duration::from_secs)
+        .unwrap_or(DEFAULT_KORGIS_STARTUP_TIMEOUT)
 }
