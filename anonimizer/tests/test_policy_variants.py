@@ -92,6 +92,11 @@ class ScopedPolicyVariantsTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             profile_service.get_all_pii_types("general")
 
+    def test_corrupt_legacy_global_definitions_cannot_downgrade_protection(self):
+        self.custom_file.write_text("{ malformed", encoding="utf-8")
+        with self.assertRaises(ValueError):
+            profile_service.get_all_pii_types("general")
+
     def test_document_analysis_uses_original_policy_snapshot_after_edit(self):
         types = profile_service.get_all_pii_types("general")
         prompt = build_system_prompt("general", types=types)
