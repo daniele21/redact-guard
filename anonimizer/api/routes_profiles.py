@@ -3,6 +3,7 @@ API routes for PII profile management and custom type CRUD.
 """
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field
 from domain.models import CustomTypeRequest, ProfileSummary, ProfileDetail, PIITypeDefinition
 from services import profile_service
 
@@ -69,3 +70,54 @@ def get_profile(name: str):
         return profile_service.load_profile(name)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail=f"Profile '{name}' not found")
+
+
+class ScopedVariantRequest(BaseModel):
+    description: str = Field(min_length=1, max_length=2048)
+    label: str | None = Field(default=None, min_length=1, max_length=80)
+    enabled: bool = True
+
+
+@router.get("/profiles/{name}/policy")
+def policy_detail(name: str):
+    try:
+        return profile_service.get_policy_detail(name)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Unknown PII profile.") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@router.put("/profiles/{name}/variants/{key}")
+def put_profile_variant(name: str, key: str, request: ScopedVariantRequest):
+    try:
+        profile_service.save_profile_variant(
+            name, key, request.description, label=request.label, enabled=request.enabled
+        )
+        return profile_service.get_policy_detail(name)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="Unknown PII profile.") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/profiles/{name}/variants/{key}/restore")
+def restore_profile_variant(name: str, key: str):
+    try:
+        profile_service.restore_profile_variant(name, key)
+        return profile_service.get_policy_detail(name)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@router.post("/profiles/{name}/variants/{key}/revert/{revision}")
+def revert_profile_variant(name: str, key: str, revision: int):
+    try:
+        profile_service.revert_profile_variant(name, key, revision)
+        return profile_service.get_policy_detail(name)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
