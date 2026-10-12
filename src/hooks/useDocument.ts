@@ -153,6 +153,7 @@ export function useDocument() {
         ...previous,
         analyzedCount: previous.analyzedCount + (previous.analysisResults[pageNumber] ? 0 : 1),
         analysisResults: { ...previous.analysisResults, [pageNumber]: result },
+        redactedPages: [],
       }));
     } catch (cause) {
       update(docId, previous => ({
@@ -189,6 +190,7 @@ export function useDocument() {
           ...previous,
           analyzedCount: previous.analyzedCount + (previous.analysisResults[pageNumber] ? 0 : 1),
           analysisResults: { ...previous.analysisResults, [pageNumber]: result },
+        redactedPages: [],
         }));
       } catch (cause) {
         update(docId, previous => ({
