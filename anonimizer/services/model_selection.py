@@ -104,3 +104,44 @@ def select_resident_model(model: str) -> str:
         except OSError as exc:
             raise ModelPreferenceError("Cannot save the local model preference.") from exc
     return model
+
+
+def get_public_hardware(model_key: str) -> dict[str, object] | None:
+    """Allowlisted host identity from Korgis; not a model requirement/benchmark."""
+    url = f"{config.korgis_base_url}/runtime/identity"
+    try:
+        with urllib.request.urlopen(
+            urllib.request.Request(url, method="GET"), timeout=3
+        ) as response:
+            payload = json.load(response)
+    except (OSError, ValueError, urllib.error.URLError):
+        return None
+    if not isinstance(payload, dict) or payload.get("protocol_version") != "local-llm-identity-v1":
+        return None
+    models = payload.get("models")
+    if not isinstance(models, dict):
+        return None
+    # Runtime keys and effective model IDs can differ. Never assume a first
+    # entry represents the user's selected model.
+    entry = models.get(model_key)
+    if not isinstance(entry, dict):
+        entry = next(
+            (candidate for candidate in models.values()
+             if isinstance(candidate, dict)
+             and isinstance(candidate.get("model"), dict)
+             and candidate["model"].get("id") == model_key),
+            None,
+        )
+    if not isinstance(entry, dict) or not isinstance(entry.get("hardware"), dict):
+        return None
+    hardware = entry["hardware"]
+    public: dict[str, object] = {}
+    for key in ("system", "machine", "processor", "accelerator"):
+        value = hardware.get(key)
+        if isinstance(value, str) and 0 < len(value) <= 100:
+            public[key] = value
+    for key in ("logical_cpus", "total_memory_bytes"):
+        value = hardware.get(key)
+        if type(value) is int and 0 < value < 2**58:
+            public[key] = value
+    return public or None
