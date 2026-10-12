@@ -1,0 +1,99 @@
+"""Regression tests for local model preference and immutable per-document selection.
+
+All identifiers are synthetic. No network calls and no model downloads.
+"""
+import json
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
+
+from config import config
+from services import model_selection
+from services.pii_detector import detect_pii_for_page
+from domain.models import PageMarkdown
+from domain.detection import LLMInferenceResult
+
+
+class _Response:
+    def __init__(self, payload):
+        self.payload = payload
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return False
+
+    def read(self, *_args):
+        return json.dumps(self.payload).encode("utf-8")
+
+
+class LocalModelPreferenceTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.path = Path(self.temp.name) / "models.json"
+        patcher = patch.object(model_selection, "_PREFERENCE_PATH", self.path)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_default_only_when_missing_and_selection_persists(self):
+        self.assertEqual(model_selection.get_selected_model(), config.korgis_model)
+        with patch.object(model_selection, "list_resident_models", return_value=["test-a", "test-b"]):
+            selected = model_selection.select_resident_model("test-b")
+        self.assertEqual(selected, "test-b")
+        self.assertEqual(model_selection.get_selected_model(), "test-b")
+        self.assertEqual(self.path.stat().st_mode & 0o777, 0o600)
+        self.assertEqual(json.loads(self.path.read_text())["model"], "test-b")
+
+    def test_nonresident_or_invalid_cannot_replace_saved_selection(self):
+        with patch.object(model_selection, "list_resident_models", return_value=["test-a"]):
+            model_selection.select_resident_model("test-a")
+            with self.assertRaises(model_selection.ModelPreferenceError):
+                model_selection.select_resident_model("test-b")
+            with self.assertRaises(model_selection.ModelPreferenceError):
+                model_selection.select_resident_model("../private")
+        self.assertEqual(model_selection.get_selected_model(), "test-a")
+
+    def test_invalid_persisted_file_never_silently_reverts_to_default(self):
+        self.path.write_text("{broken")
+        with self.assertRaises(model_selection.ModelPreferenceError):
+            model_selection.get_selected_model()
+
+    def test_network_discovery_uses_only_resident_openai_ids(self):
+        fake = _Response({"data": [{"id": "test-b"}, {"id": "test-a"}, {"id": "test-b"}, {"bad": "x"}]})
+        with patch("services.model_selection.urllib.request.urlopen", return_value=fake):
+            self.assertEqual(model_selection.list_resident_models(), ["test-a", "test-b"])
+
+    def test_offline_discovery_is_not_an_empty_compatible_catalog(self):
+        with patch("services.model_selection.urllib.request.urlopen", side_effect=OSError("offline")):
+            with self.assertRaises(model_selection.ModelCatalogUnavailable):
+                model_selection.list_resident_models()
+
+    def test_model_choice_changes_cache_key_and_inference_model(self):
+        response = LLMInferenceResult(
+            model="test-b", content='{"pii_fields":[]}', latency_ms=1, finish_reason="stop"
+        )
+        page = PageMarkdown(page_number=1, text="This contains no sensitive values.")
+        with (
+            patch("services.pii_detector.call_local_llm", return_value=response) as inference,
+            patch("services.pii_detector.cache_manager.get_llm", return_value=None) as read_cache,
+            patch("services.pii_detector.cache_manager.set_llm"),
+        ):
+            first = detect_pii_for_page(page, "general", force=False, model_key="test-a")
+            second = detect_pii_for_page(page, "general", force=False, model_key="test-b")
+        self.assertEqual(first.diagnostics.model, "test-a")
+        self.assertEqual(second.diagnostics.model, "test-b")
+        self.assertEqual(inference.call_args_list[0].kwargs["model_key"], "test-a")
+        self.assertEqual(inference.call_args_list[1].kwargs["model_key"], "test-b")
+        self.assertNotEqual(read_cache.call_args_list[0].args[0], read_cache.call_args_list[1].args[0])
+
+
+if __name__ == "__main__":
+    unittest.main()
