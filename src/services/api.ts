@@ -119,7 +119,7 @@ export const api = {
     const res = await fetch(`${base}/redact/${docId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fields_to_redact: fieldsToRedact }),
+      body: JSON.stringify({ fields_to_redact: fieldsToRedact, review_attested: true }),
     });
     if (!res.ok) {
       throw new Error(await errorMessage(res, 'Failed to apply review decisions'));

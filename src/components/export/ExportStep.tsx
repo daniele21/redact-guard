@@ -66,11 +66,11 @@ export function ExportStep({ state, onReset, onResetLabel = 'Nuovo documento' }:
           </div>
           
           <h2 className="text-2xl md:text-3xl font-bold text-on-surface tracking-tight mb-2">
-            Anonymization Complete
+            Revisione completata
           </h2>
           
           <p className="text-on-surface-variant max-w-md mx-auto leading-relaxed text-sm md:text-base">
-            Your document has been successfully processed. All selected sensitive information has been redacted.
+            Le decisioni di oscuramento sono state applicate alle occorrenze rilevate. Verifica sempre il risultato prima di condividerlo.
           </p>
         </div>
 

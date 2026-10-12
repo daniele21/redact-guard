@@ -59,6 +59,13 @@ def analyze_page(doc_id: str, page_number: int, force: bool = False):
             detail=f"Page {page_number} not found in document.",
         )
 
+    # Starting a new analysis revokes review attestation and stale decisions
+    # for all prior findings on this page, even when the run fails.
+    session.review_attested = False
+    for previous in session.pii_results.pop(page_number, []):
+        session.review_decisions.pop(previous.finding_id, None)
+        session.redaction_overrides.pop(previous.finding_id, None)
+    session.page_diagnostics.pop(page_number, None)
     session.page_analysis_status[page_number] = "analyzing"
     session.page_analysis_errors.pop(page_number, None)
     save_session(session)
@@ -101,6 +108,11 @@ def analyze_document_batch(doc_id: str):
 
     results = []
     for page in session.pages:
+        session.review_attested = False
+        for previous in session.pii_results.pop(page.page_number, []):
+            session.review_decisions.pop(previous.finding_id, None)
+            session.redaction_overrides.pop(previous.finding_id, None)
+        session.page_diagnostics.pop(page.page_number, None)
         session.page_analysis_status[page.page_number] = "analyzing"
         session.page_analysis_errors.pop(page.page_number, None)
         save_session(session)
