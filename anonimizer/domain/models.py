@@ -98,6 +98,7 @@ class DocumentSession:
     page_diagnostics: dict[int, DetectionDiagnostics | None]
     created_at: datetime
     last_accessed_at: datetime
+    model_key: str = ""  # Frozen when uploaded; legacy tests use the configured default.
 
 
 class UploadResponsePage(BaseModel):
@@ -110,6 +111,7 @@ class UploadResponse(BaseModel):
     doc_id: str
     page_count: int
     profile: str
+    model: str = "" 
     pages: list[UploadResponsePage]
 
 
