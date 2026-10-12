@@ -6,6 +6,7 @@ from services.model_selection import (
     ModelCatalogUnavailable,
     ModelPreferenceError,
     get_selected_model,
+    get_public_hardware,
     list_resident_models,
     select_resident_model,
 )
@@ -22,6 +23,7 @@ class ResidentModelCatalog(BaseModel):
     models: list[str]
     selected_resident: bool
     discovery_available: bool
+    hardware: dict[str, str | int] | None = None
 
 
 @router.get("/local-models", response_model=ResidentModelCatalog)
@@ -44,6 +46,7 @@ def get_local_models():
         models=models,
         selected_resident=selected in models,
         discovery_available=True,
+        hardware=get_public_hardware(selected) if selected in models else None,
     )
 
 
