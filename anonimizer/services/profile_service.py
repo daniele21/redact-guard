@@ -84,8 +84,8 @@ def load_custom_types() -> list[PIITypeDefinition]:
         raw = json.loads(_CUSTOM_TYPES_FILE.read_text(encoding="utf-8"))
         return [PIITypeDefinition(**item) for item in raw]
     except Exception as exc:
-        logger.error(f"Failed to load custom types: {exc}")
-        return []
+        logger.error("Failed to load legacy custom PII definitions.")
+        raise ValueError("Cannot read legacy custom PII definitions safely.") from exc
 
 
 def save_custom_types(types: list[PIITypeDefinition]) -> None:
