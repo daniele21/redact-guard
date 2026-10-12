@@ -81,7 +81,11 @@ export function ModelCenter({ health, onBack, onRetry }: Props) {
         </div>
       </section>
 
-      <section className="mt-5 rounded-2xl border border-outline-variant/60 bg-surface-container-low/60 p-5" aria-label="Hardware dichiarato dal runtime">
+      <details className="mt-5 rounded-2xl border border-outline-variant/60 bg-surface-container-low/60 p-5">
+        <summary className="cursor-pointer rounded-lg text-sm font-medium text-on-surface marker:text-primary focus-visible:outline-2 focus-visible:outline-primary">
+          Informazioni tecniche del dispositivo e del runtime
+        </summary>
+        <div className="mt-5">
         <div className="mb-3 flex items-center gap-2"><Cpu size={17} className="text-primary" aria-hidden="true" /><h2 className="text-sm font-semibold">Il tuo hardware · fonte Korgis</h2></div>
         {catalog?.hardware ? (
           <div className="grid gap-3 text-sm sm:grid-cols-3">
@@ -91,7 +95,13 @@ export function ModelCenter({ health, onBack, onRetry }: Props) {
           </div>
         ) : <p className="text-sm text-on-surface-variant">Identità hardware non disponibile dal runtime corrente.</p>}
         <p className="mt-3 text-xs text-on-surface-variant">Questi sono dati identificativi del computer restituiti dal runtime, non requisiti minimi o benchmark del modello.</p>
-      </section>
+        <div className="mt-4 border-t border-outline-variant/50 pt-3 text-xs text-on-surface-variant">
+          Korgis: {health?.korgis_mode === 'managed' ? 'gestito dall’app' : 'runtime esterno'} ·
+          Compatibilità: {health?.korgis_compatibility ?? 'non verificata'} ·
+          Provenienza delle metriche per richiesta: {health?.korgis_request_evidence_supported ? 'supportata' : 'non disponibile'}
+        </div>
+        </div>
+      </details>
 
       <div className="mt-8 flex flex-wrap items-center justify-between gap-4">
         <div>
