@@ -51,6 +51,7 @@ export interface UploadResponse {
   doc_id: string;
   page_count: number;
   profile: string;
+  model: string;
   pages: UploadResponsePage[];
 }
 
@@ -152,6 +153,21 @@ export interface ProfileDetail {
   display_name: string;
   description: string;
   pii_types: PIITypeDefinition[];
+}
+
+export interface LocalModelCatalog {
+  selected_model: string;
+  models: string[];
+  selected_resident: boolean;
+  discovery_available: boolean;
+  hardware?: {
+    system?: string;
+    machine?: string;
+    processor?: string;
+    accelerator?: string;
+    logical_cpus?: number;
+    total_memory_bytes?: number;
+  } | null;
 }
 
 export interface HealthResponse {

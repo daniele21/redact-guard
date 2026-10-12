@@ -136,6 +136,7 @@ export default function App() {
             <button type="button" onClick={openHome} className="flex items-center gap-2 text-sm text-on-surface-variant hover:text-on-surface"><ArrowLeft size={16} aria-hidden="true" /> Documenti</button>
             <div className="flex flex-wrap items-center gap-3 text-xs text-on-surface-variant">
               <span className="flex items-center gap-1"><ShieldCheck size={14} aria-hidden="true" /> Policy di questo documento: {state.profile}</span>
+              <span>Modello utilizzato: {state.model || 'Non disponibile'}</span>
               <span>{state.summary?.pages_analyzed ?? state.analyzedCount} / {state.pages.length} pagine analizzate</span>
             </div>
           </div>

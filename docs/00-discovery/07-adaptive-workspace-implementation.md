@@ -64,3 +64,21 @@ Validation: SCOPED frontend now, STRONG for upcoming persistence/lifecycle/expor
 Execution: REMOTE_AUTOMATED GitHub CI as necessary; real macOS evidence remains REAL_ENVIRONMENT.
 
 This branch must not be described as integration complete, full UX implementation, benchmark qualified or release ready merely because UI code and PR CI exist.
+
+## Resident-model preference increment (stacked, 2026-10-12)
+
+**Implementation:** `feature/adaptive-resident-model-choice` (depends on UI PR #9).
+This is a bounded subset of issue #11, not yet the complete hardware-aware Model Center.
+
+- Korgis public `GET /v1/models` remains the canonical owner of resident-model discovery. RedactGuard does not call or expose unauthenticated Korgis administrative mutation endpoints.
+- Local RedactGuard `GET /api/local-models` reports selected preference and resident ids; `PUT /api/local-models/selection` accepts only identifiers returned by live residency discovery, rejecting unavailable/invalid options. Offline is explicitly distinguished from an empty catalog.
+- Selected model is atomically saved with private file permissions in a local user-configuration directory (override via `REDACTGUARD_MODEL_PREFERENCE_FILE`). Missing preference uses configured legacy default; corrupted data **does not** silently reset.
+- Upon PDF upload, model key is frozen in the in-memory document session and returned to the frontend. Page inference requests and cache keys use that frozen selection, so a later choice does not silently swap models on an existing document.
+- The UI lists only resident models and shows unqualified benchmark/hardware values as **not available**. A nonresident preference remains saved but not ready; Korgis must be configured externally to load additional models.
+- Full system/model identity, measured hardware recommendations, signed benchmark provenance and automatically guided model loading still belong to the remainder of issue #11.
+- Korgis can evict/unload a selected resident model after selection. Subsequent inference must **fail explicitly** instead of substituting another model. RedactGuard model selection does not control Korgis residency lifecycle.
+- A model switch applies only to newly imported documents. The existing single-PDF session retains its model identifier.
+
+Risk note: Korgis uses an opt-in administrative API without automatic authentication; this integration intentionally uses the public discovery and inference APIs instead. Never enable the admin API solely to make the product selector richer. Tauri/macOS app packaging and physical evidence remain separately pending.
+
+Validation: STRONG for persistence, session snapshots and cache identity; CI Python tests and TypeScript/build are necessary but cannot replace real runtime integration evidence.
