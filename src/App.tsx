@@ -122,7 +122,7 @@ export default function App() {
       </header>
       {state.docId && screen !== 'review' && screen !== 'export' && (
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-outline-variant/40 bg-surface-container-low px-5 py-2 text-sm lg:px-9">
-          <span className="truncate text-on-surface-variant">Sessione in corso · {documents.length} {documents.length === 1 ? 'PDF' : 'PDF'} · policy del documento selezionato: {state.profile}</span>
+          <span className="truncate text-on-surface-variant">Sessione in corso · {documents.length} PDF · policy del documento selezionato: {state.profile}</span>
           <div className="flex gap-3"><button type="button" onClick={openReview} className="font-medium text-primary">Riprendi revisione</button><button type="button" onClick={discardDocument} className="text-on-surface-variant hover:text-on-surface">Chiudi</button></div>
         </div>
       )}
@@ -172,7 +172,7 @@ export default function App() {
             </aside>}
             <ReviewStep key={state.docId} state={state}
               initialDraft={state.docId ? reviewDrafts[state.docId] : undefined}
-              onDraftChange={draft => { if (state.docId) saveDraft(state.docId, draft); }}
+              onDraftChange={saveDraft}
               onAnalyzePage={analyzePage} onBatchAnalyzePages={batchAnalyzePages}
               onApplyRedactions={applyAndExport} onProceed={() => setScreen('export')} />
           </div>
