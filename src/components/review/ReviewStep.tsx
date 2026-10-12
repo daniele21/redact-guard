@@ -38,8 +38,9 @@ interface ReviewStepProps {
 export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyRedactions, onProceed }: ReviewStepProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [decisions, setDecisions] = useState<Record<string, ReviewDecision>>({});
-  const [workspaceView, setWorkspaceView] = useState<'overview' | 'findings' | 'document'>('overview');
+  const [workspaceView, setWorkspaceView] = useState<'overview' | 'findings' | 'document'>('document');
   const [isExporting, setIsExporting] = useState(false);
+  const [visitedPages, setVisitedPages] = useState<Set<number>>(new Set());
   const [selectedPages, setSelectedPages] = useState<Set<number>>(new Set());
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [viewMode, setViewMode] = useState<'document' | 'grid'>('document');
@@ -50,7 +51,35 @@ export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyR
   const totalPages = state.pages.length;
   const currentResult = state.analysisResults[currentPage];
   const currentPageData = state.pages.find(p => p.page_number === currentPage);
+
+  // A visible page counts as visited only after a valid analysis result exists.
+  // This is a navigation aid, not evidence that a human verified its contents.
+  useEffect(() => {
+    if (!currentResult || state.analysisErrors[currentPage]) return;
+    setVisitedPages(previous => {
+      if (previous.has(currentPage)) return previous;
+      const next = new Set(previous);
+      next.add(currentPage);
+      return next;
+    });
+  }, [currentPage, currentResult, state.analysisErrors]);
   const isAnalyzing = state.isAnalyzing;
+  const allPagesAnalyzed = totalPages > 0 && state.pages.every(page =>
+    Boolean(state.analysisResults[page.page_number]) && !state.analysisErrors[page.page_number]
+  );
+  const hasWarnings = Object.values(state.analysisResults).some(result =>
+    Boolean(result.warning) || (result.diagnostics?.unresolved_items ?? 0) > 0
+  );
+  const completeSummary = state.summary?.pages_analyzed === totalPages &&
+    state.summary?.pages_failed === 0 && state.summary?.pages_with_warnings === 0 &&
+    state.summary?.unresolved_findings === 0;
+  const canExport = allPagesAnalyzed && completeSummary && !hasWarnings &&
+    visitedPages.size === totalPages && !isAnalyzing && !isExporting;
+  const exportBlockReason = !allPagesAnalyzed || !completeSummary || hasWarnings
+    ? 'Analizza tutte le pagine e risolvi eventuali errori o avvisi.'
+    : visitedPages.size !== totalPages
+      ? 'Apri ogni pagina analizzata prima di confermare la revisione.'
+      : '';
 
   // Every new finding starts with the policy-safe default: redact.
   useEffect(() => {
@@ -170,6 +199,8 @@ export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyR
   };
 
   const handleExport = async () => {
+    if (!canExport) return;
+    if (!window.confirm('Confermi di aver verificato tutte le pagine e le decisioni di oscuramento? Il modello può non aver rilevato tutte le informazioni sensibili.')) return;
     setIsExporting(true);
     try {
       await onApplyRedactions(decisions);
@@ -435,9 +466,11 @@ export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyR
           )}
         </div>
 
+        <div className="ml-auto flex flex-col items-end gap-1">
+          {!canExport && <span role="status" className="max-w-64 text-right text-xs text-on-surface-variant">{exportBlockReason}</span>}
         <button
           onClick={handleExport}
-          disabled={isExporting || state.analyzedCount === 0}
+          disabled={!canExport}
           className="flex items-center gap-2 px-6 py-2 bg-on-surface text-surface-container-lowest rounded-full font-medium hover:bg-on-surface-variant transition-colors disabled:opacity-50"
         >
           {isExporting ? (
@@ -445,8 +478,9 @@ export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyR
           ) : (
             <Lock className="w-4 h-4" />
           )}
-          Apply & Export
+          Verifica ed esporta
         </button>
+        </div>
       </div>
 
       {/* Main Content */}
