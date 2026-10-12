@@ -174,7 +174,7 @@ export default function App() {
               initialDraft={state.docId ? reviewDrafts[state.docId] : undefined}
               onDraftChange={saveDraft}
               onAnalyzePage={analyzePage} onBatchAnalyzePages={batchAnalyzePages}
-              onApplyRedactions={applyAndExport} onProceed={() => setScreen('export')} />
+              onApplyRedactions={applyAndExport} onProceed={() => { if (state.docId) selectDocument(state.docId); setScreen('export'); }} />
           </div>
         </main>
       )}
