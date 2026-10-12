@@ -10,6 +10,7 @@ import {
   HealthResponse,
   DocumentAnalysisSummary,
   LocalModelCatalog,
+  ScopedPolicyDetail,
 } from '../types';
 
 let API_BASE = '/api';
@@ -137,6 +138,42 @@ export const api = {
     const base = await getBase();
     const res = await fetch(`${base}/profiles/${name}`);
     if (!res.ok) throw new Error('Failed to fetch profile detail');
+    return res.json();
+  },
+
+  getScopedPolicy: async (profile: string): Promise<ScopedPolicyDetail> => {
+    const base = await getBase();
+    const res = await fetch(`${base}/profiles/${encodeURIComponent(profile)}/policy`, { cache: 'no-store' });
+    if (!res.ok) throw new Error(await errorMessage(res, 'Cannot load PII policy'));
+    return res.json();
+  },
+
+  saveScopedVariant: async (profile: string, key: string, description: string, label: string): Promise<ScopedPolicyDetail> => {
+    const base = await getBase();
+    const res = await fetch(`${base}/profiles/${encodeURIComponent(profile)}/variants/${encodeURIComponent(key)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ description, label, enabled: true }),
+    });
+    if (!res.ok) throw new Error(await errorMessage(res, 'Cannot save PII variant'));
+    return res.json();
+  },
+
+  restoreScopedVariant: async (profile: string, key: string): Promise<ScopedPolicyDetail> => {
+    const base = await getBase();
+    const res = await fetch(`${base}/profiles/${encodeURIComponent(profile)}/variants/${encodeURIComponent(key)}/restore`, {
+      method: 'POST',
+    });
+    if (!res.ok) throw new Error(await errorMessage(res, 'Cannot restore PII definition'));
+    return res.json();
+  },
+
+  revertScopedVariant: async (profile: string, key: string, revision: number): Promise<ScopedPolicyDetail> => {
+    const base = await getBase();
+    const res = await fetch(`${base}/profiles/${encodeURIComponent(profile)}/variants/${encodeURIComponent(key)}/revert/${revision}`, {
+      method: 'POST',
+    });
+    if (!res.ok) throw new Error(await errorMessage(res, 'Cannot restore PII revision'));
     return res.json();
   },
 
