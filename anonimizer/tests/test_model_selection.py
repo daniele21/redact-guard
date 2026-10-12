@@ -94,13 +94,17 @@ class LocalModelPreferenceTests(unittest.TestCase):
         from api import routes_health
         with patch.object(model_selection, "list_resident_models", return_value=["test-a", "test-b"]):
             model_selection.select_resident_model("test-b")
-        def fake_get(url, timeout=2.0):
-            if url.endswith("/models"):
-                return {"data": [{"id": "test-a"}]}
-            return {"protocol_version": "local-llm-identity-v1",
-                    "models": {"test-a": {"model": {"id": "test-a"}}}}
-        with patch("api.routes_health._get_json", side_effect=fake_get):
+        from services.korgis_client import KorgisCompatibility
+        compatibility = KorgisCompatibility(
+            identity_protocol="local-llm-identity-v1",
+            identity_compatible=True,
+            request_evidence_supported=True,
+            model_resident=False,
+        )
+        with patch("api.routes_health.KorgisRuntimeAdapter.compatibility",
+                   return_value=compatibility) as checked:
             health = routes_health.health_check()
+        self.assertEqual(checked.call_count, 1)
         self.assertEqual(health.model, "test-b")
         self.assertEqual(health.llm_status, "model_not_resident")
 
