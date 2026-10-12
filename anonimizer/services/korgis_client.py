@@ -14,10 +14,10 @@ from domain.detection import (
 )
 
 
-def call_korgis(prompt: str, user_text: str) -> LLMInferenceResult:
+def call_korgis(prompt: str, user_text: str, model_key: str | None = None) -> LLMInferenceResult:
     """Call Korgis and preserve execution diagnostics needed by RedactGuard."""
     payload = {
-        "model": config.korgis_model,
+        "model": model_key or config.korgis_model,
         "messages": [
             {"role": "system", "content": prompt},
             {"role": "user", "content": user_text},
@@ -95,7 +95,7 @@ def call_korgis(prompt: str, user_text: str) -> LLMInferenceResult:
     usage = usage if isinstance(usage, dict) else {}
 
     return LLMInferenceResult(
-        model=config.korgis_model,
+        model=model_key or config.korgis_model,
         content=content,
         latency_ms=latency_ms,
         finish_reason=finish_reason,
