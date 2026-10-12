@@ -170,19 +170,21 @@ export default function App() {
                 ))}
               </div>
             </aside>}
-            <ReviewStep key={state.docId} state={state}
+            <div key={state.docId} className="flex min-w-0 flex-col">
+            <ReviewStep state={state}
               initialDraft={state.docId ? reviewDrafts[state.docId] : undefined}
               onDraftChange={saveDraft}
               onAnalyzePage={analyzePage} onBatchAnalyzePages={batchAnalyzePages}
               onApplyRedactions={applyAndExport} onProceed={() => { if (state.docId) selectDocument(state.docId); setScreen('export'); }} />
+            </div>
           </div>
         </main>
       )}
       {screen === 'export' && state.docId && <main className="flex-1 px-4 py-8">
-        <ExportStep key={state.docId} state={state} onReset={() => {
+        <div key={state.docId}><ExportStep state={state} onReset={() => {
           if (documents.length > 1) setScreen('review');
           else discardDocument();
-        }} onResetLabel={documents.length > 1 ? 'Torna ai documenti' : 'Nuovo documento'} />
+        }} onResetLabel={documents.length > 1 ? 'Torna ai documenti' : 'Nuovo documento'} /></div>
       </main>}
       <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-outline-variant/40 px-6 py-4 text-xs text-on-surface-variant lg:px-10">
         <span className="flex items-center gap-2"><LockKeyhole size={14} aria-hidden="true" /> AI e documenti sul dispositivo · revisione umana necessaria</span>
