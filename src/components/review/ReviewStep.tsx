@@ -4,6 +4,7 @@ import type { DocumentState } from '../../hooks/useDocument';
 import type { PIIField, ReviewDecision } from '../../types';
 import { DocumentPanel } from './DocumentPanel';
 import { fieldId } from './reviewIdentity';
+import { reviewReadiness } from './reviewGate';
 
 interface Props {
   state: DocumentState;
@@ -116,19 +117,9 @@ export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyR
     setDecisions(previous => ({ ...previous, [id]: previous[id] === 'keep' ? 'redact' : 'keep' }));
   };
 
-  const allPagesAnalyzed = total > 0 && state.pages.every(item =>
-    Boolean(state.analysisResults[item.page_number]) && !state.analysisErrors[item.page_number]);
-  const warnings = Object.values(state.analysisResults).some(item =>
-    Boolean(item.warning) || (item.diagnostics?.unresolved_items ?? 0) > 0);
-  const summaryReady = Boolean(state.summary && state.summary.pages_analyzed === total &&
-    state.summary.pages_failed === 0 && state.summary.pages_with_warnings === 0 &&
-    state.summary.unresolved_findings === 0 && state.summary.analysis_status === 'complete');
-  const canExport = allPagesAnalyzed && summaryReady && !warnings &&
-    visitedPages.size === total && !state.isAnalyzing && !saving;
-  const exportReason = !allPagesAnalyzed ? 'Analizza tutte le pagine prima di esportare.'
-    : !summaryReady || warnings ? 'Risolvi gli errori, gli avvisi o i risultati non associati al testo.'
-      : visitedPages.size !== total ? 'Apri tutte le pagine e verifica i rilevamenti.'
-        : '';
+  const gate = reviewReadiness(state, visitedPages.size, saving);
+  const canExport = gate.ready;
+  const exportReason = gate.reason;
 
   const exportReviewed = async () => {
     if (!canExport) return;
