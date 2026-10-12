@@ -18,6 +18,7 @@ export function PolicyLibrary({ activeProfile, onChooseProfile, onBack }: Props)
   const [detailError, setDetailError] = useState('');
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [query, setQuery] = useState('');
+  const [visibleCount, setVisibleCount] = useState(40);
   const [editing, setEditing] = useState(false);
   const [creating, setCreating] = useState(false);
   const [label, setLabel] = useState('');
@@ -153,11 +154,11 @@ export function PolicyLibrary({ activeProfile, onChooseProfile, onBack }: Props)
           <label className="mb-4 flex items-center gap-2 rounded-xl border border-outline-variant px-3 py-2.5">
             <Search size={17} className="text-on-surface-variant" aria-hidden="true" />
             <span className="sr-only">Cerca definizioni PII</span>
-            <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Cerca definizioni…" className="w-full bg-transparent text-sm outline-none placeholder:text-on-surface-variant" />
+            <input value={query} onChange={event => { setQuery(event.target.value); setVisibleCount(40); }} placeholder="Cerca definizioni…" className="w-full bg-transparent text-sm outline-none placeholder:text-on-surface-variant" />
           </label>
           <p className="mb-3 px-2 text-xs text-on-surface-variant">{definitions.length} definizioni · originali conservati separatamente</p>
           <div className="max-h-[58vh] space-y-1 overflow-y-auto pr-1">
-            {definitions.map(item => {
+            {definitions.slice(0, visibleCount).map(item => {
               const custom = customTypes.find(type => type.name === item.name);
               const isSelected = selectedKey === item.name && !creating;
               return (
@@ -173,6 +174,7 @@ export function PolicyLibrary({ activeProfile, onChooseProfile, onBack }: Props)
                 </button>
               );
             })}
+            {definitions.length > visibleCount && <button type="button" onClick={() => setVisibleCount(count => count + 40)} className="mt-2 w-full rounded-xl border border-outline-variant px-4 py-3 text-sm text-primary hover:bg-surface-container-high">Mostra altre definizioni ({definitions.length - visibleCount})</button>}
             {!loading && detail && definitions.length === 0 && <div className="p-5 text-sm text-on-surface-variant">Nessuna definizione corrispondente alla ricerca.</div>}
             {!detail && !detailError && <div className="p-5 text-sm text-on-surface-variant">Caricamento definizioni…</div>}
           </div>
