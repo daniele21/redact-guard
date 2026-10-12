@@ -44,6 +44,7 @@ export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyR
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const resultRef = useRef(state.analysisResults);
+  const decisionsResultRef = useRef(state.analysisResults);
 
   const result = state.analysisResults[page];
   const pageData = state.pages.find(item => item.page_number === page);
@@ -65,6 +66,25 @@ export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyR
   useEffect(() => {
     if (state.docId) onDraftChange?.(state.docId, { decisions, visitedPages: Array.from(visitedPages) });
   }, [state.docId, decisions, visitedPages, onDraftChange]);
+
+  // A repeated analysis invalidates prior keep/not_pii decisions for the
+  // changed pages. New suggestions revert to the privacy-safe redact default.
+  useEffect(() => {
+    const prior = decisionsResultRef.current;
+    decisionsResultRef.current = state.analysisResults;
+    const changedPages = Object.entries(state.analysisResults)
+      .filter(([number, result]) => prior[Number(number)] !== result)
+      .map(([number]) => Number(number));
+    if (!changedPages.length) return;
+    setDecisions(previous => {
+      const next = { ...previous };
+      for (const number of changedPages) {
+        for (const field of prior[number]?.pii_fields ?? []) delete next[fieldId(field, number)];
+        for (const field of state.analysisResults[number].pii_fields) next[fieldId(field, number)] = 'redact';
+      }
+      return next;
+    });
+  }, [state.analysisResults]);
 
   // Privacy-safe initial decision: redact every valid model-proposed finding.
   useEffect(() => {
