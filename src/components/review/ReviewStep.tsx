@@ -33,6 +33,7 @@ export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyR
   const [visitedPages, setVisitedPages] = useState<Set<number>>(new Set());
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
+  const [visibleGroups, setVisibleGroups] = useState(40);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const resultRef = useRef(state.analysisResults);
@@ -204,10 +205,10 @@ export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyR
           <label className="mb-4 flex items-center gap-2 rounded-xl border border-outline-variant px-3 py-2.5">
             <Search size={17} className="text-on-surface-variant" aria-hidden="true" />
             <span className="sr-only">Cerca rilevamenti</span>
-            <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Cerca tipo o categoria…" className="w-full bg-transparent text-sm outline-none placeholder:text-on-surface-variant" />
+            <input value={query} onChange={event => { setQuery(event.target.value); setVisibleGroups(40); }} placeholder="Cerca tipo o categoria…" className="w-full bg-transparent text-sm outline-none placeholder:text-on-surface-variant" />
           </label>
           <div className="max-h-[54vh] flex-1 space-y-2 overflow-y-auto pr-1">
-            {shownGroups.length ? shownGroups.map(group => {
+            {shownGroups.length ? shownGroups.slice(0, visibleGroups).map(group => {
               const groupDecisions = group.occurrences.map(item => decisions[fieldId(item.field, item.page)] ?? 'redact');
               const decision = groupDecisions.every(item => item === groupDecisions[0]) ? groupDecisions[0] : 'mixed';
               const selected = selectedId === group.id;
@@ -226,6 +227,7 @@ export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyR
                 </article>
               );
             }) : <p className="rounded-xl bg-surface-container-low p-5 text-sm text-on-surface-variant">{groups.length ? 'Nessuna corrispondenza.' : 'Nessun rilevamento. Analizza il documento prima di interpretare questo risultato.'}</p>}
+            {shownGroups.length > visibleGroups && <button type="button" onClick={() => setVisibleGroups(count => count + 40)} className="w-full rounded-xl border border-outline-variant px-4 py-3 text-sm text-primary hover:bg-surface-container-high">Mostra altri rilevamenti ({shownGroups.length - visibleGroups})</button>}
           </div>
         </aside>
       </div>
