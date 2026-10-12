@@ -18,7 +18,7 @@ interface Props {
   onApplyRedactions: (decisions: Record<string, ReviewDecision>) => Promise<void>;
   onProceed: () => void;
   initialDraft?: ReviewDraft;
-  onDraftChange?: (draft: ReviewDraft) => void;
+  onDraftChange?: (docId: string, draft: ReviewDraft) => void;
 }
 
 interface Group {
@@ -63,8 +63,8 @@ export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyR
   }, [state.analysisResults, state.analysisErrors, page]);
 
   useEffect(() => {
-    onDraftChange?.({ decisions, visitedPages: Array.from(visitedPages) });
-  }, [decisions, visitedPages, onDraftChange]);
+    if (state.docId) onDraftChange?.(state.docId, { decisions, visitedPages: Array.from(visitedPages) });
+  }, [state.docId, decisions, visitedPages, onDraftChange]);
 
   // Privacy-safe initial decision: redact every valid model-proposed finding.
   useEffect(() => {
