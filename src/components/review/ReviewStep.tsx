@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, ArrowRight, Check, CheckCircle2, ChevronLeft, ChevronRight, Eye, FileSearch, LockKeyhole, Search, ShieldOff } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Check, CheckCircle2, ChevronLeft, ChevronRight, Eye, FileSearch, LockKeyhole, PanelRightClose, PanelRightOpen, Search, ShieldOff } from 'lucide-react';
 import type { DocumentState } from '../../hooks/useDocument';
 import type { PIIField, ReviewDecision } from '../../types';
 import { DocumentPanel } from './DocumentPanel';
@@ -41,6 +41,7 @@ export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyR
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [visibleGroups, setVisibleGroups] = useState(40);
+  const [inspectorOpen, setInspectorOpen] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const resultRef = useRef(state.analysisResults);
@@ -190,10 +191,16 @@ export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyR
           <span className="flex items-center gap-1"><FileSearch size={15} aria-hidden="true" /> {state.summary?.pages_analyzed ?? state.analyzedCount}/{total} pagine analizzate</span>
           <span>{groups.length} entità rilevate</span>
           <span>{visitedPages.size}/{total} pagine aperte</span>
+          <button type="button" aria-expanded={inspectorOpen} aria-controls="pii-inspector"
+            onClick={() => setInspectorOpen(current => !current)}
+            className="inline-flex min-h-10 items-center gap-2 rounded-full border border-outline-variant px-3 py-2 text-xs text-on-surface hover:border-primary/60 focus-visible:outline-2 focus-visible:outline-primary">
+            {inspectorOpen ? <PanelRightClose size={16} aria-hidden="true" /> : <PanelRightOpen size={16} aria-hidden="true" />}
+            {inspectorOpen ? 'Nascondi rilevamenti' : 'Mostra rilevamenti'}
+          </button>
         </div>
       </div>
 
-      <div className="grid min-h-0 flex-1 gap-4 px-4 pb-4 lg:grid-cols-[minmax(0,1fr)_340px] lg:px-8">
+      <div className={'grid min-h-0 flex-1 gap-4 px-4 pb-4 lg:px-8 ' + (inspectorOpen ? 'lg:grid-cols-[minmax(0,1fr)_340px]' : 'grid-cols-1')}>
         <div className="flex min-h-0 flex-col gap-3">
           <div className="rg-context-card flex flex-wrap items-center justify-between gap-3 rounded-2xl px-4 py-3">
             <div className="flex items-center gap-3 text-sm">
@@ -228,7 +235,7 @@ export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyR
           <p className="text-xs text-on-surface-variant">Anteprima del testo estratto dal PDF, non del layout PDF originale. Le evidenziazioni rappresentano risultati del modello, non garanzie di completezza.</p>
         </div>
 
-        <aside aria-label="Rilevamenti e decisioni" className="rg-context-card flex min-h-[500px] flex-col rounded-2xl p-4">
+        {inspectorOpen && <aside id="pii-inspector" aria-label="Rilevamenti e decisioni" className="rg-context-card flex min-h-[500px] flex-col rounded-2xl p-4">
           <div className="mb-4">
             <h2 className="text-lg font-semibold">Rilevamenti</h2>
             <p className="mt-1 text-xs leading-5 text-on-surface-variant">Valori mascherati nell’elenco. Scegli una voce per verificarla nel documento.</p>
@@ -260,7 +267,7 @@ export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyR
             }) : <p className="rounded-xl bg-surface-container-low p-5 text-sm text-on-surface-variant">{groups.length ? 'Nessuna corrispondenza.' : 'Nessun rilevamento. Analizza il documento prima di interpretare questo risultato.'}</p>}
             {shownGroups.length > visibleGroups && <button type="button" onClick={() => setVisibleGroups(count => count + 40)} className="w-full rounded-xl border border-outline-variant px-4 py-3 text-sm text-primary hover:bg-surface-container-high">Mostra altri rilevamenti ({shownGroups.length - visibleGroups})</button>}
           </div>
-        </aside>
+        </aside>}
       </div>
 
       <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-4 border-t border-outline-variant/60 bg-surface-container-lowest/95 px-5 py-4 backdrop-blur-lg lg:px-9">
