@@ -96,9 +96,11 @@ def main() -> int:
         and '.args(["korgis"' in tauri,
         "managed Korgis must remain a separate sidecar process",
     )
+    launcher = (ROOT / "sidecar" / "src" / "main.rs").read_text(encoding="utf-8")
     require(
-        '--enable-admin-api' in tauri,
-        "managed Korgis must expose the loopback-only lifecycle API to RedactGuard",
+        "--enable-admin-api" not in tauri
+        and "--enable-admin-api" not in launcher,
+        "managed runtime must not enable unauthenticated Korgis admin APIs",
     )
 
     print(
