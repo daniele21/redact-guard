@@ -133,5 +133,95 @@ class ProtectedExportTests(unittest.TestCase):
                 ensure_complete_analysis(session)
 
 
+class ConcurrentDocumentTests(unittest.TestCase):
+    """Concurrency regressions for exported content and session lifecycle."""
+
+    def test_export_waits_for_reanalysis_and_then_refuses_stale_attestation(self):
+        from threading import Event, Thread
+
+        session, field = make_session()
+        session.review_attested = True
+        detection_started = Event()
+        release_detection = Event()
+        export_started = Event()
+        export_finished = Event()
+        results = {}
+        replacement = PageAnalysisResult(
+            page_number=1, has_pii=True,
+            pii_fields=[field], redacted_text="Cliente: [REDACTED_PRIVATE_PERSON].",
+        )
+
+        def slow_detection(*_args, **_kwargs):
+            detection_started.set()
+            if not release_detection.wait(timeout=5):
+                raise RuntimeError("Test synchronization timed out")
+            return replacement
+
+        def reanalyze():
+            try:
+                routes_analyze.analyze_page("synthetic", 1, force=True)
+                results["analysis"] = "complete"
+            except Exception as error:
+                results["analysis_error"] = error
+
+        def export():
+            export_started.set()
+            try:
+                routes_export.export_document("synthetic")
+                results["export"] = "unsafe_success"
+            except HTTPException as error:
+                results["export_status"] = error.status_code
+            finally:
+                export_finished.set()
+
+        with (
+            patch.object(routes_analyze, "get_session", return_value=session),
+            patch.object(routes_analyze, "save_session"),
+            patch.object(routes_analyze, "detect_pii_for_page", side_effect=slow_detection),
+            patch.object(routes_export, "get_session", return_value=session),
+        ):
+            worker = Thread(target=reanalyze, daemon=True)
+            worker.start()
+            self.assertTrue(detection_started.wait(timeout=3))
+
+            downloader = Thread(target=export, daemon=True)
+            downloader.start()
+            self.assertTrue(export_started.wait(timeout=3))
+            self.assertFalse(
+                export_finished.wait(timeout=0.1),
+                "Export must not read a document during in-flight reanalysis",
+            )
+            release_detection.set()
+            worker.join(timeout=3)
+            downloader.join(timeout=3)
+        self.assertFalse(worker.is_alive())
+        self.assertFalse(downloader.is_alive())
+        self.assertEqual(results.get("analysis"), "complete", results)
+        self.assertEqual(results.get("export_status"), 409, results)
+        self.assertNotIn("export", results)
+        self.assertFalse(session.review_attested)
+
+    def test_cleanup_does_not_evict_busy_expired_session(self):
+        from datetime import timedelta
+        from threading import Thread
+        from services import session_store
+
+        session, _ = make_session()
+        session.last_accessed_at = (
+            datetime.now(timezone.utc) - timedelta(days=2)
+        )
+        with patch.object(session_store, "_sessions", {session.doc_id: session}):
+            with session.operation_lock:
+                cleaner = Thread(
+                    target=session_store.cleanup_idle_sessions, daemon=True
+                )
+                cleaner.start()
+                cleaner.join(timeout=3)
+                self.assertFalse(cleaner.is_alive())
+                self.assertIn(session.doc_id, session_store._sessions)
+            session_store.cleanup_idle_sessions()
+            self.assertNotIn(session.doc_id, session_store._sessions)
+
+
 if __name__ == "__main__":
     unittest.main()
