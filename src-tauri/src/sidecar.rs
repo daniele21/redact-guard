@@ -84,7 +84,7 @@ fn valid_model_identifier(model: &str) -> bool {
     (1..=160).contains(&bytes.len())
         && bytes[0].is_ascii_alphanumeric()
         && bytes.iter().all(|b| {
-            b.is_ascii_alphanumeric() || matches!(b, b'_' | b'.' | b':' | b'/' | b'-')
+            b.is_ascii_alphanumeric() || matches!(*b, b'_' | b'.' | b':' | b'/' | b'-')
         })
 }
 
