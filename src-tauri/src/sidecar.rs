@@ -96,11 +96,22 @@ fn managed_launch_model(configured: &str, path: &Path) -> Result<String, String>
             if value.get("version").and_then(|v| v.as_u64()) != Some(1) {
                 return Err("Unsupported saved model preference version".to_string());
             }
-            value
+            let model_id = value
                 .get("model")
                 .and_then(|model| model.as_str())
-                .ok_or_else(|| "Saved model preference is missing the model key".to_string())?
-                .to_string()
+                .ok_or_else(|| "Saved model preference is missing the model key".to_string())?;
+            if !valid_model_identifier(model_id) {
+                return Err("Invalid saved model identifier".to_string());
+            }
+            // Korgis serves requests by public model ID, but bootstraps by
+            // registry key. The API resolves and saves this mapping on selection.
+            match value.get("startup_key") {
+                Some(startup) => startup
+                    .as_str()
+                    .ok_or_else(|| "Saved Korgis startup key is invalid".to_string())?
+                    .to_string(),
+                None => model_id.to_string(), // v1 legacy file: Korgis may reject an unknown key.
+            }
         }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => configured.to_string(),
         Err(_) => return Err("Cannot read local model preference".to_string()),
@@ -364,6 +375,18 @@ mod preference_tests {
     }
 
     #[test]
+    fn distinct_public_id_and_startup_registry_key_survive_restart() {
+        let path = temporary_preference(
+            r#"{"version":1,"model":"provider/model-revision","startup_key":"registry-model-q4"}"#,
+        );
+        assert_eq!(
+            managed_launch_model("default-model", &path).unwrap(),
+            "registry-model-q4"
+        );
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
     fn saved_preference_overrides_launcher_default_at_restart() {
         let path = temporary_preference(r#"{"version":1,"model":"test-model-b"}"#);
         assert_eq!(managed_launch_model("default-model", &path).unwrap(), "test-model-b");
@@ -378,6 +401,8 @@ mod preference_tests {
             r#"{"version":1,"model":"../private"}"#,
             r#"{"version":1,"model":""}"#,
             r#"{"version":1,"model":123}"#,
+            r#"{"version":1,"model":"valid-model","startup_key":"../private"}"#,
+            r#"{"version":1,"model":"valid-model","startup_key":123}"#,
         ] {
             let path = temporary_preference(raw);
             assert!(managed_launch_model("default-model", &path).is_err());
