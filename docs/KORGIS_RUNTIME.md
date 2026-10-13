@@ -32,17 +32,9 @@ GET  /v1/runtime/identity
 POST /v1/chat/completions
 ```
 
-Managed desktop mode may additionally enable Korgis administrative control-plane routes for model lifecycle and resource-policy inspection:
+The bundled managed runtime deliberately **does not enable** Korgis' optional administrative routes: they have no integrated authentication. RedactGuard uses only public model discovery, public identity and explicit inference. Korgis itself still owns acquisition and lifecycle. Future controlled activation requires an authenticated/isolated management boundary.
 
-```text
-GET  /api/v1/models/registry
-POST /api/v1/models/load
-POST /api/v1/models/activate
-DELETE /api/v1/models/{model}
-GET  /api/v1/resources
-```
-
-External/developer mode must remain usable without assuming administrative access.
+External/developer mode remains usable without administrative access.
 
 ## Runtime modes and defaults
 
@@ -62,6 +54,16 @@ uv run --frozen local-llm serve --model nemotron-nano-4b --no-download
 ```
 
 The packaged desktop release defaults to `managed` when no explicit `KORGIS_MODE` override is supplied. Development builds default to `external` so the normal dev loop does not unexpectedly start/download a model. Either mode can still be selected explicitly.
+
+### Persisted model and restart contract
+
+The Model Center stores a versioned, local `model-selection.json` file. The active model shown to the user is Korgis' public `GET /v1/models` **model ID**. RedactGuard resolves the distinct **registry startup key** using the matching model entry of `GET /v1/runtime/identity` and stores both identities. It rejects selection if the mapping is absent or ambiguous.
+
+When starting a managed Tauri release, the Rust owner reads the exact same local preference path as the Python backend (`~/Library/Application Support/RedactGuard/model-selection.json`, overridable via `REDACTGUARD_MODEL_PREFERENCE_FILE`). The launcher passes the stored `startup_key` to Korgis' `serve --model`, while the document analyzer continues to use the saved public `model` ID for chat inference and cache keys. The already-open document retains its frozen model. If no preference has ever been saved, the launcher uses the configured default.
+
+Corrupted/unknown preference versions and malformed model identifiers fail closed; they do not silently reset the saved selection. Legacy v1 records containing only `model` continue to be read and may fail Korgis CLI startup when their model ID is not a registry key; reselecting the desired resident model migrates the file to the explicit two-identity record.
+
+A preference does not imply the model is still downloadable, compatible or resident. Korgis startup failures and any missing residency must remain visible rather than silently substituting a model. Mac device confirmation remains pending.
 
 For PII extraction RedactGuard requests JSON output, temperature 0, and disables thinking traces.
 
