@@ -36,6 +36,27 @@ def get_json(url: str) -> dict:
         return body
 
 
+def classify_startup_failure(logfile: Path) -> str:
+    """Return a fixed diagnostic label; never expose local paths or log contents."""
+    try:
+        tail = logfile.read_bytes()[-16000:].decode("utf-8", errors="replace")
+    except OSError:
+        return "startup_failed_no_logs"
+    if "Cannot locate RedactGuard Python environment or backend" in tail:
+        return "packaged_resource_path_missing"
+    if "ModuleNotFoundError" in tail:
+        return "python_module_unavailable"
+    if "ImportError" in tail:
+        return "python_import_failure"
+    if "Permission denied" in tail:
+        return "packaged_executable_not_permitted"
+    if "Address already in use" in tail:
+        return "loopback_port_conflict"
+    if "Traceback (most recent call last)" in tail:
+        return "python_exception"
+    return "packaged_sidecar_exited"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--app", required=True, type=Path)
@@ -78,7 +99,9 @@ def main() -> int:
             try:
                 while time.monotonic() < deadline:
                     if process.poll() is not None:
-                        raise RuntimeError("Packaged backend exited before readiness.")
+                        raise RuntimeError(
+                            "Packaged backend exited: " + classify_startup_failure(logfile)
+                        )
                     try:
                         health = get_json(base + "/health")
                         break
