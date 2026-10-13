@@ -83,18 +83,49 @@ def list_resident_models() -> list[str]:
     return sorted(seen)
 
 
+def _resident_startup_key(model: str) -> str:
+    """Resolve the registry key from Korgis public identity, not from filename or model ID."""
+    try:
+        with urllib.request.urlopen(
+            urllib.request.Request(
+                f"{config.korgis_base_url}/runtime/identity", method="GET"
+            ), timeout=3,
+        ) as response:
+            payload = json.load(response)
+    except (OSError, ValueError, urllib.error.URLError) as exc:
+        raise ModelCatalogUnavailable(
+            "Korgis runtime identity is unavailable; model choice not saved."
+        ) from exc
+    if not isinstance(payload, dict) or payload.get("protocol_version") != "local-llm-identity-v1":
+        raise ModelCatalogUnavailable("Korgis does not provide a compatible model identity.")
+    models = payload.get("models")
+    if not isinstance(models, dict):
+        raise ModelCatalogUnavailable("Korgis model identity catalog is invalid.")
+    matched = [
+        key for key, entry in models.items()
+        if isinstance(key, str) and _MODEL_RE.fullmatch(key)
+        and isinstance(entry, dict)
+        and isinstance(entry.get("model"), dict)
+        and entry["model"].get("id") == model
+    ]
+    if len(matched) != 1:
+        raise ModelCatalogUnavailable("The selected model cannot be mapped unambiguously to a Korgis startup key.")
+    return matched[0]
+
+
 def select_resident_model(model: str) -> str:
     """Persist an explicitly selected resident model; no silent load/fallback."""
     model = _validate(model)
     with _LOCK:
         if model not in list_resident_models():
             raise ModelPreferenceError("The requested model is not resident in Korgis.")
+        startup_key = _resident_startup_key(model)
         try:
             _PREFERENCE_PATH.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
             fd, path = tempfile.mkstemp(prefix=".model-selection-", dir=_PREFERENCE_PATH.parent)
             try:
                 with os.fdopen(fd, "w", encoding="utf-8") as stream:
-                    json.dump({"version": 1, "model": model}, stream)
+                    json.dump({"version": 1, "model": model, "startup_key": startup_key}, stream)
                     stream.flush()
                     os.fsync(stream.fileno())
                 os.replace(path, _PREFERENCE_PATH)
