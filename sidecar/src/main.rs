@@ -260,13 +260,15 @@ mod tests {
         assert!(roots
             .iter()
             .any(|root| root.ends_with("Contents/MacOS/../Resources/resources")));
-        assert!(api_production_candidates(exe_dir).iter().any(|(python, backend)| {
-            python.ends_with("Resources/resources/python/venv/bin/python")
-                && backend.ends_with("Resources/resources/backend")
-        }));
-        assert!(korgis_production_candidates(exe_dir).iter().any(|python| {
-            python.ends_with("Resources/resources/korgis/venv/bin/python")
-        }));
+        assert!(api_production_candidates(exe_dir)
+            .iter()
+            .any(|(python, backend)| {
+                python.ends_with("Resources/resources/python/venv/bin/python")
+                    && backend.ends_with("Resources/resources/backend")
+            }));
+        assert!(korgis_production_candidates(exe_dir)
+            .iter()
+            .any(|python| { python.ends_with("Resources/resources/korgis/venv/bin/python") }));
     }
 
     #[test]
