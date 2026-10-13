@@ -113,3 +113,15 @@ Managed mode still uses a separate Korgis process. RedactGuard must not import/c
 ## Completion
 
 RedactGuard-owned implementation is complete when fresh exact-head automated validation is green. Integration/release completion still requires the declared packaged REAL_ENVIRONMENT managed-runtime E2E; benchmark comparison remains owned by the companion Performance Lab rather than this app.
+
+## 2026-10-13 — Integration security and packaged startup gates
+
+Integration candidate: [PR #17](https://github.com/daniele21/redact-guard/pull/17). This is not a release sign-off.
+
+- **Runtime surface:** packaged managed Korgis still starts via its own launcher and serves the public inference/model discovery endpoints on loopback. RedactGuard does not use the unauthenticated administrative control plane, so the launcher now leaves its optional admin API disabled. The packaging invariant rejects accidental re-enablement in either Rust launcher owner.
+- **Document concurrency:** one in-memory `DocumentSession.operation_lock` serializes page/batch analysis, review attestation, protected Markdown export and summary reporting for the same document. Independent documents have independent locks. TTL cleanup skips a busy document instead of evicting it during inference. Regression tests cover concurrent export and reanalysis as well as cleanup under a held lock.
+- **Packaged macOS smoke:** after constructing the ad-hoc signed Apple Silicon bundle, GitHub Actions runs `scripts/smoke-packaged-macos-api.py` against the **actual bundled API launcher**. The smoke verifies local startup, bundled PII policy availability, explicit offline Korgis state and model preference propagation. It intentionally does **not** download a model, perform PII inference or claim that the Tauri GUI was manually operated.
+- **Full packaged inference:** the repository-owned `scripts/run-managed-package-e2e.py` still requires a representative installed macOS environment and suitable model availability to prove live inference, CPU/RAM provenance and process lifecycle. Its evidence has not been substituted with synthetic smoke results.
+- **UX:** browser smoke remains a synthetic API-driven test; accessibility and full-screen visual usability assessment require separate evidence.
+
+**Validation status:** validate the exact candidate commit through GitHub Actions. A job pending or failing on an earlier SHA is not evidence for a newer HEAD. Actual signing identity, notarization and representative Mac resource behavior remain REAL_ENVIRONMENT/release concerns.
