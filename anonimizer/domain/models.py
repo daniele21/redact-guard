@@ -1,4 +1,5 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from threading import RLock
 from datetime import datetime
 from enum import Enum
 
@@ -103,6 +104,7 @@ class DocumentSession:
     policy_prompt: str | None = None
     policy_digest: str = ""
     review_attested: bool = False
+    operation_lock: RLock = field(default_factory=RLock, repr=False, compare=False)
 
 
 class UploadResponsePage(BaseModel):
