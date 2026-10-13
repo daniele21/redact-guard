@@ -195,7 +195,7 @@ fn build_korgis_command(python_bin: &Path, port: u16, model: &str) -> Command {
         &port_str,
         "--model",
         model,
-        "--enable-admin-api",
+
     ]);
     cmd
 }
@@ -270,7 +270,7 @@ mod tests {
                 "1235",
                 "--model",
                 "demo",
-                "--enable-admin-api",
+
             ]
         );
     }
