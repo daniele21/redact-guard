@@ -1,5 +1,6 @@
 use std::env;
-use std::path::PathBuf;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_shell::process::CommandEvent;
@@ -60,13 +61,68 @@ fn project_root(handle: &AppHandle) -> PathBuf {
     }
 }
 
+/// Keep the startup key in sync with the backend's canonical local preference.
+/// Only managed mode can control residency; external users manage Korgis themselves.
+fn model_preference_path() -> Result<PathBuf, String> {
+    if let Some(path) = env::var_os("REDACTGUARD_MODEL_PREFERENCE_FILE") {
+        if path.is_empty() {
+            return Err("REDACTGUARD_MODEL_PREFERENCE_FILE cannot be empty".to_string());
+        }
+        return Ok(PathBuf::from(path));
+    }
+    let home = env::var_os("HOME")
+        .ok_or_else(|| "Cannot locate local model preference without HOME".to_string())?;
+    Ok(PathBuf::from(home)
+        .join("Library")
+        .join("Application Support")
+        .join("RedactGuard")
+        .join("model-selection.json"))
+}
+
+fn valid_model_identifier(model: &str) -> bool {
+    let bytes = model.as_bytes();
+    (1..=160).contains(&bytes.len())
+        && bytes[0].is_ascii_alphanumeric()
+        && bytes.iter().all(|b| {
+            b.is_ascii_alphanumeric() || matches!(b, b'_' | b'.' | b':' | b'/' | b'-')
+        })
+}
+
+fn managed_launch_model(configured: &str, path: &Path) -> Result<String, String> {
+    let saved = match fs::read_to_string(path) {
+        Ok(raw) => {
+            let value: serde_json::Value = serde_json::from_str(&raw)
+                .map_err(|_| "Saved model preference contains invalid JSON".to_string())?;
+            if value.get("version").and_then(|v| v.as_u64()) != Some(1) {
+                return Err("Unsupported saved model preference version".to_string());
+            }
+            value
+                .get("model")
+                .and_then(|model| model.as_str())
+                .ok_or_else(|| "Saved model preference is missing the model key".to_string())?
+                .to_string()
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => configured.to_string(),
+        Err(_) => return Err("Cannot read local model preference".to_string()),
+    };
+    if !valid_model_identifier(&saved) {
+        return Err("Invalid saved model identifier; refusing to load another model".to_string());
+    }
+    Ok(saved)
+}
+
 /// Start RedactGuard and, when explicitly configured, its managed Korgis process.
 ///
 /// Korgis stays a separate process and remains the owner of model acquisition,
 /// model lifecycle, inference and resource telemetry.
 pub async fn start_backend(handle: &AppHandle) -> Result<(), String> {
     let mode = KorgisMode::from_env()?;
-    let model = env::var("KORGIS_MODEL").unwrap_or_else(|_| "nemotron-nano-4b".to_string());
+    let configured = env::var("KORGIS_MODEL")
+        .unwrap_or_else(|_| "nemotron-nano-4b".to_string());
+    let model = match mode {
+        KorgisMode::Managed => managed_launch_model(&configured, &model_preference_path()?)?,
+        KorgisMode::External => configured,
+    };
 
     let korgis_base_url = match mode {
         KorgisMode::External => {
@@ -273,4 +329,70 @@ fn managed_korgis_startup_timeout() -> Duration {
         .and_then(|value| value.parse::<u64>().ok())
         .map(Duration::from_secs)
         .unwrap_or(DEFAULT_KORGIS_STARTUP_TIMEOUT)
+}
+
+
+#[cfg(test)]
+mod preference_tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temporary_preference(json: &str) -> PathBuf {
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock before epoch")
+            .as_nanos();
+        let path = env::temp_dir().join(format!(
+            "redactguard-model-preference-{}-{}.json",
+            std::process::id(), stamp
+        ));
+        fs::write(&path, json).expect("create synthetic preference");
+        path
+    }
+
+    #[test]
+    fn absent_preference_uses_existing_configured_model() {
+        let path = env::temp_dir().join(format!(
+            "redactguard-absent-model-preference-{}.json",
+            std::process::id()
+        ));
+        let _ = fs::remove_file(&path);
+        assert_eq!(
+            managed_launch_model("default-model", &path).unwrap(),
+            "default-model"
+        );
+    }
+
+    #[test]
+    fn saved_preference_overrides_launcher_default_at_restart() {
+        let path = temporary_preference(r#"{"version":1,"model":"test-model-b"}"#);
+        assert_eq!(managed_launch_model("default-model", &path).unwrap(), "test-model-b");
+        fs::remove_file(&path).unwrap();
+    }
+
+    #[test]
+    fn corrupted_or_incompatible_preferences_fail_closed() {
+        for raw in [
+            "{broken",
+            r#"{"version":2,"model":"test-model-b"}"#,
+            r#"{"version":1,"model":"../private"}"#,
+            r#"{"version":1,"model":""}"#,
+            r#"{"version":1,"model":123}"#,
+        ] {
+            let path = temporary_preference(raw);
+            assert!(managed_launch_model("default-model", &path).is_err());
+            fs::remove_file(path).unwrap();
+        }
+    }
+
+    #[test]
+    fn model_key_validation_matches_backend_identifier_contract() {
+        assert!(valid_model_identifier("nemotron-nano-4b-q8"));
+        assert!(valid_model_identifier("registry/quantized:Q4_K_M"));
+        assert!(!valid_model_identifier("model with spaces"));
+        assert!(!valid_model_identifier("--model"));
+        assert!(!valid_model_identifier("../anything"));
+        assert!(!valid_model_identifier("é"));
+        assert!(!valid_model_identifier(&"a".repeat(161)));
+    }
 }
