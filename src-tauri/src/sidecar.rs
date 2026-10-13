@@ -83,9 +83,9 @@ fn valid_model_identifier(model: &str) -> bool {
     let bytes = model.as_bytes();
     (1..=160).contains(&bytes.len())
         && bytes[0].is_ascii_alphanumeric()
-        && bytes.iter().all(|b| {
-            b.is_ascii_alphanumeric() || matches!(*b, b'_' | b'.' | b':' | b'/' | b'-')
-        })
+        && bytes
+            .iter()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(*b, b'_' | b'.' | b':' | b'/' | b'-'))
 }
 
 fn managed_launch_model(configured: &str, path: &Path) -> Result<String, String> {
@@ -128,8 +128,7 @@ fn managed_launch_model(configured: &str, path: &Path) -> Result<String, String>
 /// model lifecycle, inference and resource telemetry.
 pub async fn start_backend(handle: &AppHandle) -> Result<(), String> {
     let mode = KorgisMode::from_env()?;
-    let configured = env::var("KORGIS_MODEL")
-        .unwrap_or_else(|_| "nemotron-nano-4b".to_string());
+    let configured = env::var("KORGIS_MODEL").unwrap_or_else(|_| "nemotron-nano-4b".to_string());
     let model = match mode {
         KorgisMode::Managed => managed_launch_model(&configured, &model_preference_path()?)?,
         KorgisMode::External => configured,
@@ -342,7 +341,6 @@ fn managed_korgis_startup_timeout() -> Duration {
         .unwrap_or(DEFAULT_KORGIS_STARTUP_TIMEOUT)
 }
 
-
 #[cfg(test)]
 mod preference_tests {
     use super::*;
@@ -355,7 +353,8 @@ mod preference_tests {
             .as_nanos();
         let path = env::temp_dir().join(format!(
             "redactguard-model-preference-{}-{}.json",
-            std::process::id(), stamp
+            std::process::id(),
+            stamp
         ));
         fs::write(&path, json).expect("create synthetic preference");
         path
@@ -389,7 +388,10 @@ mod preference_tests {
     #[test]
     fn saved_preference_overrides_launcher_default_at_restart() {
         let path = temporary_preference(r#"{"version":1,"model":"test-model-b"}"#);
-        assert_eq!(managed_launch_model("default-model", &path).unwrap(), "test-model-b");
+        assert_eq!(
+            managed_launch_model("default-model", &path).unwrap(),
+            "test-model-b"
+        );
         fs::remove_file(&path).unwrap();
     }
 
