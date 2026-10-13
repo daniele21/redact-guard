@@ -191,6 +191,11 @@ jobs:
           assert payload["source_commit"] == sys.argv[2]
           assert len(payload["wheel_sha256"]) == 64
           PY
+      - name: Smoke actual packaged macOS API sidecar (without model inference)
+        shell: bash
+        run: |
+          python3 scripts/smoke-packaged-macos-api.py \
+            --app "src-tauri/target/aarch64-apple-darwin/release/bundle/macos/RedactGuard.app"
       - name: Archive app bundle preserving executable permissions
         shell: bash
         run: |
