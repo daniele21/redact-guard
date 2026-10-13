@@ -98,7 +98,7 @@ def analyze_page(doc_id: str, page_number: int, force: bool = False):
         return result
     
     
-    @router.post("/analyze/{doc_id}", response_model=BatchAnalysisResponse)
+@router.post("/analyze/{doc_id}", response_model=BatchAnalysisResponse)
 def analyze_document_batch(doc_id: str):
     """Analyze all pages sequentially and preserve page-level status."""
     session = get_session(doc_id)
