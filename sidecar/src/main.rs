@@ -119,6 +119,9 @@ fn korgis_production_candidates(exe_dir: &Path) -> Vec<PathBuf> {
 
 fn resource_roots(exe_dir: &Path) -> Vec<PathBuf> {
     vec![
+        // Tauri v2 preserves the source "resources/" directory in the bundle:
+        // Contents/Resources/resources/{python,backend,korgis}.
+        exe_dir.join("../Resources/resources"),
         exe_dir.join("../Resources"),
         exe_dir.join("../resources"),
         exe_dir.join("resources"),
@@ -248,6 +251,22 @@ mod tests {
         ];
         assert_eq!(parse_u16_arg(&args, "--port"), Some(4321));
         assert_eq!(arg_value(&args, "--model").as_deref(), Some("demo-model"));
+    }
+
+    #[test]
+    fn packaged_resource_paths_include_tauri_preserved_resources_directory() {
+        let exe_dir = Path::new("/Applications/RedactGuard.app/Contents/MacOS");
+        let roots = resource_roots(exe_dir);
+        assert!(roots
+            .iter()
+            .any(|root| root.ends_with("Contents/MacOS/../Resources/resources")));
+        assert!(api_production_candidates(exe_dir).iter().any(|(python, backend)| {
+            python.ends_with("Resources/resources/python/venv/bin/python")
+                && backend.ends_with("Resources/resources/backend")
+        }));
+        assert!(korgis_production_candidates(exe_dir).iter().any(|python| {
+            python.ends_with("Resources/resources/korgis/venv/bin/python")
+        }));
     }
 
     #[test]
