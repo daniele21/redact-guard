@@ -191,7 +191,6 @@ fn bundled_site_packages(python_bin: &Path, owner: &str) -> Option<PathBuf> {
     )
 }
 
-
 fn dev_venv_bin() -> &'static str {
     if cfg!(windows) {
         ".venv/Scripts/python.exe"
@@ -313,7 +312,9 @@ mod tests {
 
     #[test]
     fn packaged_python_uses_isolated_site_packages_for_each_runtime() {
-        let python = Path::new("/Applications/RedactGuard.app/Contents/Resources/resources/python/bin/python3");
+        let python = Path::new(
+            "/Applications/RedactGuard.app/Contents/Resources/resources/python/bin/python3",
+        );
         let api_site = bundled_site_packages(python, "python").unwrap();
         let korgis_site = bundled_site_packages(python, "korgis").unwrap();
         assert!(api_site.ends_with("python/venv/lib/python3.13/site-packages"));
@@ -327,8 +328,15 @@ mod tests {
         );
         let korgis = build_korgis_command(python, 4302, "synthetic");
         let api_env = api.get_envs().find(|(key, _)| key == "PYTHONPATH").unwrap();
-        let korgis_env = korgis.get_envs().find(|(key, _)| key == "PYTHONPATH").unwrap();
-        assert!(api_env.1.unwrap().to_string_lossy().contains("python/venv/lib/python3.13/site-packages"));
+        let korgis_env = korgis
+            .get_envs()
+            .find(|(key, _)| key == "PYTHONPATH")
+            .unwrap();
+        assert!(api_env
+            .1
+            .unwrap()
+            .to_string_lossy()
+            .contains("python/venv/lib/python3.13/site-packages"));
         assert_eq!(korgis_env.1.unwrap(), korgis_site.as_os_str());
     }
 
