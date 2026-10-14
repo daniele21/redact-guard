@@ -6,6 +6,12 @@ on:
 permissions:
   contents: read
 
+# New commits to the same PR invalidate old exact-head evidence. Avoid
+# parallel stale macOS app builds and duplicate large package artifacts.
+concurrency:
+  group: redactguard-pr-validation-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   backend:
     runs-on: ubuntu-latest
