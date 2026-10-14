@@ -10,7 +10,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import subprocess
 from pathlib import Path
 import signal
 import socket
@@ -179,8 +178,11 @@ def main() -> int:
                 }, sort_keys=True))
             except Exception as exc:
                 # Sanitized diagnostic: do not publish model, PII, paths or raw logs.
-                print("Packaged sidecar smoke failed: "
-                      + type(exc).__name__ + " / " + str(exc).split(":")[-1].strip()[:90])
+                failure_code = (
+                    classify_startup_failure(logfile)
+                    if isinstance(exc, RuntimeError) else "non_runtime_exception"
+                )
+                print("Packaged sidecar smoke failed: " + failure_code, flush=True)
                 raise
             finally:
                 if process.poll() is None:
