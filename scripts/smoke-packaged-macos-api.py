@@ -68,34 +68,36 @@ def classify_startup_failure(logfile: Path) -> str:
 
 
 def package_preflight(app: Path) -> dict[str, str]:
-    """Return bounded, non-sensitive packaged-resource diagnostic categories."""
+    """Probe the actual relocated Python executable and each isolated package."""
     roots = [
         app / "Contents" / "Resources" / "resources",
         app / "Contents" / "Resources",
     ]
-    statuses = {}
     for root in roots:
         if not root.is_dir():
             continue
-        for owner, paths in (
-            ("api", ("python/venv/bin/python", "backend/main.py")),
-            ("korgis", ("korgis/venv/bin/python", "korgis/manifest.json")),
+        interpreter = root / "python" / "bin" / "python3"
+        statuses: dict[str, str] = {}
+        for owner, marker, packages, module in (
+            ("api", "backend/main.py", "python/venv/lib/python3.13/site-packages", "uvicorn"),
+            ("korgis", "korgis/manifest.json", "korgis/venv/lib/python3.13/site-packages", "local_llm_server"),
         ):
-            executable = root / paths[0]
-            files = root / paths[1]
-            if not executable.is_symlink() and not executable.exists():
-                status = "binary_missing"
-            elif executable.is_symlink() and not executable.exists():
-                status = "broken_python_symlink"
-            elif not files.exists():
-                status = "data_missing"
+            site = root / packages
+            if not interpreter.exists():
+                status = "standalone_python_missing"
+            elif interpreter.is_symlink() and not interpreter.resolve().is_relative_to(app.resolve()):
+                status = "interpreter_symlink_outside_app"
+            elif not (root / marker).is_file() or not site.is_dir():
+                status = "package_data_missing"
             else:
                 try:
                     check = subprocess.run(
-                        [str(executable), "--version"], stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL, timeout=6,
+                        [str(interpreter), "-c", f"import {module}"],
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                        timeout=15,
+                        env={**os.environ, "PYTHONPATH": str(site), "PYTHONNOUSERSITE": "1"},
                     )
-                    status = "ready" if check.returncode == 0 else "python_exited_nonzero"
+                    status = "ready" if check.returncode == 0 else "package_import_failed"
                 except OSError:
                     status = "python_exec_oserror"
                 except subprocess.TimeoutExpired:
@@ -113,7 +115,10 @@ def main() -> int:
 
     if os.uname().sysname != "Darwin":
         parser.error("This smoke requires macOS.")
-    print("Packaged resource diagnostic: " + json.dumps(package_preflight(args.app), sort_keys=True), flush=True)
+    checks = package_preflight(args.app)
+    print("Packaged resource diagnostic: " + json.dumps(checks, sort_keys=True), flush=True)
+    if checks.get("api") != "ready" or checks.get("korgis") != "ready":
+        raise SystemExit("Packaged interpreter or isolated dependencies failed preflight.")
     binaries = list((args.app / "Contents" / "MacOS").glob("redactguard-server*"))
     if len(binaries) != 1 or not binaries[0].is_file():
         raise SystemExit("Packaged RedactGuard API launcher missing or ambiguous.")
