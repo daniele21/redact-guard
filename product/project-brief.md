@@ -19,21 +19,21 @@ Professionals handling sensitive documents need to minimize PII before sharing o
 
 **Maintainable privacy policy + local contextual detection + human review + deterministic minimization.**
 
-RedactGuard owns the document workflow and PII policy. **Korgis is the external local AI runtime authority**.
+RedactGuard owns the document workflow and PII policy. **Korgis remains the independent local AI execution authority**, shipped as a separate managed process in the desktop package or connected externally in development.
 
 ## In scope
 
 - PDF → Markdown through Docling;
-- built-in and custom PII taxonomies;
+- built-in PII taxonomy and profile-scoped, versioned PII variants;
 - contextual PII detection through Korgis;
 - visual review and per-field redaction;
 - deterministic post-processing/redaction;
-- local caches and in-memory document sessions;
-- anonymized Markdown export.
+- local caches, immutable model/policy snapshots and independent in-memory multi-PDF sessions;
+- explicit reviewer attestation and backend-gated protected Markdown export (no PDF layout preservation).
 
 ## Runtime Architecture
 
-RedactGuard does **not** embed a model server or model downloader.
+RedactGuard does **not** implement its own model server or downloader. The macOS desktop candidate packages Korgis as a separately launched, isolated runtime; development may connect to an external Korgis instance.
 
 - RedactGuard backend: policy, prompts, Docling, span resolution, review/redaction/cache/export.
 - Korgis: model registry, artifact download/verification, backend selection, model lifecycle, inference and runtime identity.
@@ -41,7 +41,7 @@ RedactGuard does **not** embed a model server or model downloader.
 - Readiness/evidence: `GET /v1/models` and `GET /v1/runtime/identity`.
 - Default RedactGuard model key: `nemotron-nano-4b`.
 
-Current compatibility baseline: `daniele21/korgis@26a161dc0ef89a133c7a076d3a31544a274c1469` (`dev`).
+Current candidate pin: `daniele21/korgis@809511e2ba33bfb61ab195bf32ca4152b759c293`, maintained canonically in `.engineering/korgis-runtime.json`. This is an integration candidate, not a released baseline.
 
 ## Success Criteria
 
@@ -57,6 +57,6 @@ Current compatibility baseline: `daniele21/korgis@26a161dc0ef89a133c7a076d3a3154
 - macOS primary; Linux/Windows architectural targets;
 - Python FastAPI backend;
 - React/Vite/Tailwind frontend;
-- Tauri desktop shell is experimental;
-- Korgis remains a separate local runtime, not a Python dependency or embedded server;
+- Tauri macOS desktop candidate has automated package startup and synthetic UX evidence; representative installed-GUI and real-model inference evidence remain pending;
+- Korgis remains a separate process with its own dependencies and lifecycle, never a RedactGuard backend Python import;
 - no cloud document-processing requirement and no application database.

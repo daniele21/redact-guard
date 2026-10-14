@@ -13,7 +13,7 @@ Core jobs:
 3. Understand the active local AI model without selecting it for each import.
 4. Review detected occurrences in context and export after checking the result.
 
-Values: local-document privacy, maintainable configurable PII taxonomy and evidence-based hardware-aware model choice. The third value still requires backend/runtime contracts.
+Values: local-document privacy, maintainable configurable PII taxonomy and evidence-based hardware-aware model choice. Resident-model selection and runtime evidence contracts exist; measured hardware recommendations still require independent qualified benchmarks.
 
 ## UI slice A — implemented in this branch
 
@@ -95,9 +95,9 @@ The existing in-memory backend session store is already keyed by independent `do
 - No batch ZIP/output claim, no persistent job ledger, and no resumable queue after restarting the app. Expired backend sessions return errors rather than being considered complete.
 - This is frontend aggregation of real backend single-PDF sessions, not an independent backend batch inference API or a new execution engine.
 
-**Still pending for issue #12:** backend-enforced review attestation / export readiness (client gate alone is insufficient), session cleanup API and lifecycle under cancellation, representative memory/large-PDF benchmarks, realistic Tauri device E2E and optional explicitly requested partial batch export behavior.
+**Remaining for issue #12:** session cleanup/removal API and cancellation lifecycle, representative memory/large-PDF benchmarks, realistic Tauri device E2E and optional partial/bulk export. Backend-attested export and per-document operation locks are implemented and regression-tested; attestation is still in-memory, not independently auditable proof of human inspection.
 
-Automated proof: bounded candidate/session tests and per-document state isolation, plus existing static/frontend/backend/sidecar CI. Full session-switch UX evidence requires browser/Tauri interaction testing.
+Automated proof includes candidate/session isolation, two-PDF and two-page browser UX journeys, keyboard interactions and Markdown download, plus static/frontend/backend/sidecar CI. Actual installed Tauri/VoiceOver behavior remains unverified.
 
 ## Backend export attestation and fail-closed guard (stacked)
 
@@ -110,6 +110,10 @@ The desktop UI gate is no longer the sole control for the protected Markdown art
 - Synthetic regression tests cover incomplete/failed/warning/unresolved runs, missing confirmation, unknown IDs, successful redaction and revocation after reanalysis.
 - The read-only client protection report remains accessible for partial/incomplete analysis so exceptions can be understood; its status must not be confused with successful protected-document export.
 
-**Limitations:** This is local in-memory session attestation, not independent proof of human inspection or detector accuracy. The backend does not yet offer authenticated reviewers, durable/auditable attestations, or a transactional concurrent mutation/export snapshot. Runtime concurrency and session-store locking need representative adversarial/real-environment E2E before release. Do not claim complete sensitive-data removal or compliance certification.
+**Limitations:** This is local in-memory session attestation, not independent proof of human inspection or detector accuracy. The backend serializes analysis, review and protected export per document and skips busy sessions during TTL cleanup, but does not yet offer authenticated reviewers or durable/auditable attestations; adversarial process/session lifetime and installed-device E2E remain pending. Do not claim complete sensitive-data removal or compliance certification.
 
 API compatibility note: legacy clients calling `PATCH /api/redact/{doc_id}` without `review_attested=true` receive HTTP 409. This is intentional fail-closed security behavior. The included Adaptive Workspace client sends the field after user confirmation.
+
+## Integration and native QA reference — October 2026
+
+The integration candidate is PR #17 (`integration/adaptive-korgis-desktop`). The canonical representative installed-Mac acceptance plan lives at `docs/00-discovery/08-adaptive-desktop-native-acceptance.md`. The package CI performs an actual **packaged API startup smoke**, not installed WebView accessibility or real Korgis model inference. The PR CI uses per-PR concurrency to avoid superseded macOS build/artifact duplication. Release readiness remains gated by applicable REAL_ENVIRONMENT evidence.
