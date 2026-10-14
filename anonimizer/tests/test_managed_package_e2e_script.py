@@ -28,7 +28,10 @@ def _valid_summary():
         "hardware": {
             "system": "Darwin",
         },
+        "expected_public_model_id": "test-public-model",
+        "korgis_startup_key_matches_identity": True,
         "health": {
+            "model": "test-public-model",
             "llm_status": "online",
             "korgis_mode": "managed",
             "korgis_request_evidence_supported": True,
@@ -81,6 +84,11 @@ class ManagedPackageEvidenceTests(unittest.TestCase):
         summary = _valid_summary()
         summary["document"]["resources"]["evidence_requests"] = 0
         self.assertIn("no_resource_evidence_requests", module.validate_summary(summary))
+
+    def test_public_inference_id_must_match_started_korgis_registry_identity(self):
+        summary = _valid_summary()
+        summary["health"]["model"] = "unrelated-fallback"
+        self.assertIn("selected_model_identity_mismatch", module.validate_summary(summary))
 
     def test_e2e_never_requires_disabled_unauthenticated_admin_api(self):
         runner = inspect.getsource(module.run)
