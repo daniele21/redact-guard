@@ -200,7 +200,7 @@ export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyR
         </div>
       </div>
 
-      <div className={'grid min-h-0 flex-1 gap-4 px-4 pb-4 lg:px-8 ' + (inspectorOpen ? 'lg:grid-cols-[minmax(0,1fr)_340px]' : 'grid-cols-1')}>
+      <div className={'grid min-h-0 flex-1 gap-4 px-4 pb-4 lg:px-8 ' + (inspectorOpen ? 'min-[900px]:grid-cols-[minmax(0,1fr)_280px] xl:grid-cols-[minmax(0,1fr)_340px]' : 'grid-cols-1')}>
         <div className="flex min-h-0 flex-col gap-3">
           <div className="rg-context-card flex flex-wrap items-center justify-between gap-3 rounded-2xl px-4 py-3">
             <div className="flex items-center gap-3 text-sm">
@@ -222,7 +222,7 @@ export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyR
           {!state.analysisErrors[page] && result?.warning && <div role="alert" className="flex items-center gap-2 rounded-xl border border-warning/30 bg-warning/10 p-4 text-sm text-warning"><AlertTriangle size={19} aria-hidden="true" /> {result.warning}</div>}
           {state.isAnalyzing && <p role="status" className="rounded-xl bg-primary/5 p-3 text-sm text-primary">Analisi locale in corso {state.currentAnalyzingPage ? '· pagina ' + state.currentAnalyzingPage : ''}…</p>}
 
-          <div className="min-h-[280px] flex-1 overflow-y-auto rounded-2xl border border-outline-variant/70 bg-surface-container-lowest p-2 lg:min-h-[320px]">
+          <div className="min-h-[260px] flex-1 overflow-y-auto rounded-2xl border border-outline-variant/70 bg-surface-container-lowest p-2 lg:min-h-[320px]">
             {pageData ? <DocumentPanel
               text={pageData.text}
               fields={result?.pii_fields ?? []}
@@ -270,7 +270,7 @@ export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyR
         </aside>}
       </div>
 
-      <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-4 border-t border-outline-variant/60 bg-surface-container-lowest/95 px-5 py-4 backdrop-blur-lg lg:px-9">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-t border-outline-variant/60 bg-surface-container-lowest/95 px-5 py-4 lg:px-9">
         <div className="min-w-0">
           {canExport ? <p className="flex items-center gap-2 text-sm text-success"><CheckCircle2 size={18} aria-hidden="true" /> Pagine analizzate e aperte per revisione</p>
             : <p role="status" className="flex items-start gap-2 text-sm text-warning"><AlertTriangle size={17} className="mt-0.5 shrink-0" aria-hidden="true" /> {exportReason}</p>}
