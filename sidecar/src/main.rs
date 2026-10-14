@@ -33,7 +33,11 @@ fn run_api(args: &[String]) -> ExitCode {
     };
 
     let mut cmd = build_api_command(&python_bin, &backend_dir, port);
-    cmd.env("PYTHONPATH", &backend_dir);
+    if bundled_site_packages(&python_bin, "python").is_none() {
+        // Development virtualenv: uvicorn's app-dir supplies backend imports.
+        cmd.env("PYTHONPATH", &backend_dir);
+    }
+    cmd.env("PYTHONNOUSERSITE", "1");
 
     for key in [
         "KORGIS_MODE",
@@ -67,7 +71,8 @@ fn run_korgis(args: &[String]) -> ExitCode {
         }
     };
 
-    let cmd = build_korgis_command(&python_bin, port, &model);
+    let mut cmd = build_korgis_command(&python_bin, port, &model);
+    cmd.env("PYTHONNOUSERSITE", "1");
     exec_command(cmd, "Korgis")
 }
 
