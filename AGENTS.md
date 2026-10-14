@@ -343,3 +343,14 @@ For privacy-sensitive changes, also provide:
 - subprocessors or vendor changes
 
 When reviewing work, lead with findings and concrete references.
+
+
+## Shared Mac CI (local-runner-infra)
+
+This repository uses `daniele21/local-runner-infra` for an initial self-hosted macOS validation lane.
+
+- `.github/workflows/local-ci.yml` submits exact commits via GitHub `repository_dispatch` using `CENTRAL_DISPATCH_TOKEN`. Do not replace it with `runs-on: self-hosted` targeting runners registered to another repository.
+- Keep the source-owned test commands in `.github/ci/local-test.sh`; update this bounded lane when appropriate. A central job checks out the exact commit and invokes it on one of the central Mac runners.
+- Check central run logs and the `local-ci/mac` commit status for the **test** outcome. A successful dispatch is only a successful submission.
+- Do **not** delete existing PR/release workflows, Linux/Windows build matrices, required checks, or specialist validation based on this initial lane. Prove equivalence and gain approval before any replacement.
+- Central contract and onboarding: https://github.com/daniele21/local-runner-infra/blob/main/docs/integration-guide.md
