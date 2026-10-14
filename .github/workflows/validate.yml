@@ -176,6 +176,14 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-darwin
+          components: rustfmt
+      # Same versioned, source-owned lane as the trusted central Mac executor.
+      # On PRs it runs only on a disposable GitHub-hosted ARM64 Mac with
+      # read-only permissions; do not dispatch untrusted PR code to physical Mac.
+      - name: Run source-owned Mac CI lane on PR HEAD (hosted ARM64)
+        shell: bash
+        timeout-minutes: 12
+        run: bash .github/ci/local-test.sh
       - run: pnpm install --frozen-lockfile
       - name: Build managed sidecar resources
         shell: bash
