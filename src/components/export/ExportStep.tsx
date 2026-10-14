@@ -79,6 +79,10 @@ export function ExportStep({ state, onReset, onResetLabel = 'Nuovo documento' }:
             Revisione completata
           </h2>
           
+          <p className="mx-auto mt-2 max-w-md truncate rounded-full bg-surface-container-high px-3 py-1.5 text-xs font-medium text-on-surface-variant" title={state.filename}>
+            Documento: {state.filename}
+          </p>
+
           <p className="text-on-surface-variant max-w-md mx-auto leading-relaxed text-sm md:text-base">
             Le decisioni di oscuramento sono state applicate alle occorrenze rilevate. Verifica sempre il risultato prima di condividerlo.
           </p>
