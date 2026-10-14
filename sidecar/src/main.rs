@@ -83,7 +83,10 @@ fn resolve_api_paths(exe_dir: &Path) -> Option<(PathBuf, PathBuf)> {
         .into_iter()
         .chain(api_dev_candidates(exe_dir))
     {
-        if python.exists() && backend.exists() {
+        if python.exists()
+            && backend.exists()
+            && bundled_site_packages(&python, "python").is_some_and(|path| path.exists())
+        {
             return Some((python, backend));
         }
     }
@@ -100,20 +103,23 @@ fn resolve_korgis_python(exe_dir: &Path) -> Option<PathBuf> {
 
     korgis_production_candidates(exe_dir)
         .into_iter()
-        .find(|path| path.exists())
+        .find(|path| {
+            path.exists()
+                && bundled_site_packages(path, "korgis").is_some_and(|site| site.exists())
+        })
 }
 
 fn api_production_candidates(exe_dir: &Path) -> Vec<(PathBuf, PathBuf)> {
     resource_roots(exe_dir)
         .into_iter()
-        .map(|resources| (resources.join(python_venv_bin()), resources.join("backend")))
+        .map(|resources| (resources.join("python/bin/python3"), resources.join("backend")))
         .collect()
 }
 
 fn korgis_production_candidates(exe_dir: &Path) -> Vec<PathBuf> {
     resource_roots(exe_dir)
         .into_iter()
-        .map(|resources| resources.join(korgis_venv_bin()))
+        .map(|resources| resources.join("python/bin/python3"))
         .collect()
 }
 
@@ -144,21 +150,29 @@ fn api_dev_candidates(exe_dir: &Path) -> Vec<(PathBuf, PathBuf)> {
     ]
 }
 
-fn python_venv_bin() -> &'static str {
-    if cfg!(windows) {
-        "python/venv/Scripts/python.exe"
-    } else {
-        "python/venv/bin/python"
+/// Use the relocatable standalone interpreter, not venv/bin/python.
+/// The latter may load libpython relative to the venv directory and fail
+/// after Tauri relocates the bundle to Contents/Resources.
+fn bundled_site_packages(python_bin: &Path, owner: &str) -> Option<PathBuf> {
+    if !matches!(owner, "python" | "korgis") {
+        return None;
     }
+    let bin = python_bin.parent()?;
+    if bin.file_name()? != "bin" {
+        return None;
+    }
+    let runtime = bin.parent()?;
+    if runtime.file_name()? != "python" {
+        return None;
+    }
+    let resources = runtime.parent()?;
+    Some(
+        resources
+            .join(owner)
+            .join("venv/lib/python3.13/site-packages"),
+    )
 }
 
-fn korgis_venv_bin() -> &'static str {
-    if cfg!(windows) {
-        "korgis/venv/Scripts/python.exe"
-    } else {
-        "korgis/venv/bin/python"
-    }
-}
 
 fn dev_venv_bin() -> &'static str {
     if cfg!(windows) {
@@ -182,6 +196,11 @@ fn build_api_command(python_bin: &Path, backend_dir: &Path, port: u16) -> Comman
         "--app-dir",
     ]);
     cmd.arg(backend_dir);
+    if let Some(site) = bundled_site_packages(python_bin, "python") {
+        if let Ok(paths) = env::join_paths([backend_dir, site.as_path()]) {
+            cmd.env("PYTHONPATH", paths);
+        }
+    }
     cmd
 }
 
@@ -199,6 +218,9 @@ fn build_korgis_command(python_bin: &Path, port: u16, model: &str) -> Command {
         "--model",
         model,
     ]);
+    if let Some(site) = bundled_site_packages(python_bin, "korgis") {
+        cmd.env("PYTHONPATH", site);
+    }
     cmd
 }
 
@@ -263,12 +285,33 @@ mod tests {
         assert!(api_production_candidates(exe_dir)
             .iter()
             .any(|(python, backend)| {
-                python.ends_with("Resources/resources/python/venv/bin/python")
+                python.ends_with("Resources/resources/python/bin/python3")
                     && backend.ends_with("Resources/resources/backend")
             }));
         assert!(korgis_production_candidates(exe_dir)
             .iter()
-            .any(|python| { python.ends_with("Resources/resources/korgis/venv/bin/python") }));
+            .any(|python| { python.ends_with("Resources/resources/python/bin/python3") }));
+    }
+
+    #[test]
+    fn packaged_python_uses_isolated_site_packages_for_each_runtime() {
+        let python = Path::new("/Applications/RedactGuard.app/Contents/Resources/resources/python/bin/python3");
+        let api_site = bundled_site_packages(python, "python").unwrap();
+        let korgis_site = bundled_site_packages(python, "korgis").unwrap();
+        assert!(api_site.ends_with("python/venv/lib/python3.13/site-packages"));
+        assert!(korgis_site.ends_with("korgis/venv/lib/python3.13/site-packages"));
+        assert_ne!(api_site, korgis_site);
+
+        let api = build_api_command(
+            python,
+            Path::new("/Applications/RedactGuard.app/Contents/Resources/resources/backend"),
+            4301,
+        );
+        let korgis = build_korgis_command(python, 4302, "synthetic");
+        let api_env = api.get_envs().find(|(key, _)| key == "PYTHONPATH").unwrap();
+        let korgis_env = korgis.get_envs().find(|(key, _)| key == "PYTHONPATH").unwrap();
+        assert!(api_env.1.unwrap().to_string_lossy().contains("python/venv/lib/python3.13/site-packages"));
+        assert_eq!(korgis_env.1.unwrap(), korgis_site.as_os_str());
     }
 
     #[test]
