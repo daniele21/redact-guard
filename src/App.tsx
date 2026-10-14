@@ -160,8 +160,8 @@ export default function App() {
           {importErrors.length > 0 && <div role="alert" className="border-b border-warning/30 bg-warning/5 px-5 py-3 text-sm text-warning lg:px-9">
             {importErrors.length} {importErrors.length === 1 ? 'file non importato' : 'file non importati'}: {importErrors.map(item => item.filename || item.message).join(', ')}. Nessun file viene considerato elaborato se l'import è fallito.
           </div>}
-          <div className={'grid min-h-0 flex-1 gap-3 ' + (documents.length > 1 ? 'lg:grid-cols-[220px_minmax(0,1fr)]' : '')}>
-            {documents.length > 1 && <aside aria-label="Documenti della sessione" className="border-b border-outline-variant/50 bg-surface-container-lowest px-3 py-4 lg:border-b-0 lg:border-r">
+          <div className={'grid min-h-0 flex-1 gap-3 ' + (documents.length > 1 ? 'min-[900px]:grid-cols-[190px_minmax(0,1fr)] xl:grid-cols-[220px_minmax(0,1fr)]' : '')}>
+            {documents.length > 1 && <aside aria-label="Documenti della sessione" className="border-b border-outline-variant/50 bg-surface-container-lowest px-3 py-4 min-[900px]:border-b-0 min-[900px]:border-r">
               <div className="mb-4 px-2 text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Documenti ({documents.length})</div>
               <div className="max-h-[72vh] space-y-1 overflow-y-auto">
                 {documents.map(item => (
