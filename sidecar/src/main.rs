@@ -85,7 +85,7 @@ fn resolve_api_paths(exe_dir: &Path) -> Option<(PathBuf, PathBuf)> {
     {
         if python.exists()
             && backend.exists()
-            && bundled_site_packages(&python, "python").is_some_and(|path| path.exists())
+            && bundled_site_packages(&python, "python").map_or(true, |path| path.exists())
         {
             return Some((python, backend));
         }
@@ -105,21 +105,34 @@ fn resolve_korgis_python(exe_dir: &Path) -> Option<PathBuf> {
         .into_iter()
         .find(|path| {
             path.exists()
-                && bundled_site_packages(path, "korgis").is_some_and(|site| site.exists())
+                && bundled_site_packages(path, "korgis").map_or(true, |site| site.exists())
         })
 }
 
 fn api_production_candidates(exe_dir: &Path) -> Vec<(PathBuf, PathBuf)> {
     resource_roots(exe_dir)
         .into_iter()
-        .map(|resources| (resources.join("python/bin/python3"), resources.join("backend")))
+        .map(|resources| {
+            let python = if cfg!(windows) {
+                resources.join("python/venv/Scripts/python.exe")
+            } else {
+                resources.join("python/bin/python3")
+            };
+            (python, resources.join("backend"))
+        })
         .collect()
 }
 
 fn korgis_production_candidates(exe_dir: &Path) -> Vec<PathBuf> {
     resource_roots(exe_dir)
         .into_iter()
-        .map(|resources| resources.join("python/bin/python3"))
+        .map(|resources| {
+            if cfg!(windows) {
+                resources.join("korgis/venv/Scripts/python.exe")
+            } else {
+                resources.join("python/bin/python3")
+            }
+        })
         .collect()
 }
 
