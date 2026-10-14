@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import subprocess
 from pathlib import Path
 import signal
 import socket
@@ -42,6 +43,16 @@ def classify_startup_failure(logfile: Path) -> str:
         tail = logfile.read_bytes()[-16000:].decode("utf-8", errors="replace")
     except OSError:
         return "startup_failed_no_logs"
+    if "Library not loaded" in tail or "dyld[" in tail:
+        return "macos_dyld_loader_failure"
+    if "bad interpreter" in tail or "bad CPU type" in tail:
+        return "packaged_python_interpreter_failure"
+    if "No such file or directory" in tail:
+        return "required_file_missing"
+    if "Fatal Python error" in tail or "Python path configuration" in tail:
+        return "python_runtime_configuration_failure"
+    if "No module named" in tail:
+        return "required_python_module_missing"
     if "Cannot locate RedactGuard Python environment or backend" in tail:
         return "packaged_resource_path_missing"
     if "ModuleNotFoundError" in tail:
@@ -57,6 +68,44 @@ def classify_startup_failure(logfile: Path) -> str:
     return "packaged_sidecar_exited"
 
 
+def package_preflight(app: Path) -> dict[str, str]:
+    """Return bounded, non-sensitive packaged-resource diagnostic categories."""
+    roots = [
+        app / "Contents" / "Resources" / "resources",
+        app / "Contents" / "Resources",
+    ]
+    statuses = {}
+    for root in roots:
+        if not root.is_dir():
+            continue
+        for owner, paths in (
+            ("api", ("python/venv/bin/python", "backend/main.py")),
+            ("korgis", ("korgis/venv/bin/python", "korgis/manifest.json")),
+        ):
+            executable = root / paths[0]
+            files = root / paths[1]
+            if not executable.is_symlink() and not executable.exists():
+                status = "binary_missing"
+            elif executable.is_symlink() and not executable.exists():
+                status = "broken_python_symlink"
+            elif not files.exists():
+                status = "data_missing"
+            else:
+                try:
+                    check = subprocess.run(
+                        [str(executable), "--version"], stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL, timeout=6,
+                    )
+                    status = "ready" if check.returncode == 0 else "python_exited_nonzero"
+                except OSError:
+                    status = "python_exec_oserror"
+                except subprocess.TimeoutExpired:
+                    status = "python_exec_timeout"
+            statuses[owner] = status
+        return statuses
+    return {"bundle": "no_known_resources_directory"}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--app", required=True, type=Path)
@@ -65,6 +114,7 @@ def main() -> int:
 
     if os.uname().sysname != "Darwin":
         parser.error("This smoke requires macOS.")
+    print("Packaged resource diagnostic: " + json.dumps(package_preflight(args.app), sort_keys=True), flush=True)
     binaries = list((args.app / "Contents" / "MacOS").glob("redactguard-server*"))
     if len(binaries) != 1 or not binaries[0].is_file():
         raise SystemExit("Packaged RedactGuard API launcher missing or ambiguous.")
@@ -129,7 +179,8 @@ def main() -> int:
                 }, sort_keys=True))
             except Exception as exc:
                 # Sanitized diagnostic: do not publish model, PII, paths or raw logs.
-                print(f"Packaged sidecar smoke failed: {type(exc).__name__}")
+                print("Packaged sidecar smoke failed: "
+                      + type(exc).__name__ + " / " + str(exc).split(":")[-1].strip()[:90])
                 raise
             finally:
                 if process.poll() is None:
