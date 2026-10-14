@@ -72,6 +72,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: node --experimental-strip-types --test src/components/review/reviewGate.test.mjs
+      - run: node --experimental-strip-types --test src/components/review/reviewVisits.test.mjs
       - run: node --experimental-strip-types --test src/hooks/documentQueue.test.mjs
       - run: pnpm build
 
