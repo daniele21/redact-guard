@@ -213,6 +213,16 @@ try {
 
   await page.getByRole('button', { name: 'Analizza tutte' }).click();
   await page.getByText('1 entità rilevate').waitFor();
+  await page.getByText('2/2 pagine analizzate').waitFor();
+  // Opening page 1 before analysis of page 2 must be remembered.
+  assert.equal(await page.getByRole('button', { name: /Conferma ed esporta/ }).isDisabled(), true);
+  await page.getByRole('button', { name: 'Pagina successiva' }).click();
+  await page.getByText('2/2 pagine aperte').waitFor();
+  assert.equal(await page.getByRole('button', { name: /Conferma ed esporta/ }).isDisabled(), false);
+  // Reanalysis must not reset the reviewed state of an unchanged page 1.
+  await page.getByRole('button', { name: 'Rianalizza pagina' }).click();
+  await page.getByText('2/2 pagine aperte').waitFor();
+  await page.getByRole('button', { name: 'Pagina precedente' }).click();
   await page.getByRole('button', { name: 'Nascondi rilevamenti' }).click();
   assert.equal(await page.getByRole('complementary', { name: 'Rilevamenti e decisioni' }).count(), 0);
   await snap('05-focused-document');
@@ -253,7 +263,7 @@ try {
   page.once('dialog', dialog => dialog.accept());
   await page.getByRole('button', { name: /Conferma ed esporta/ }).click();
   await page.getByRole('heading', { name: 'Revisione completata' }).waitFor();
-  await page.getByText('Contratto: [REDACTED_PRIVATE_PERSON].').waitFor();
+  await page.getByText(/Contratto: \[REDACTED_PRIVATE_PERSON\]/).first().waitFor();
   await snap('09-protected-markdown');
   const [download] = await Promise.all([
     page.waitForEvent('download'),
@@ -262,7 +272,7 @@ try {
   assert.match(download.suggestedFilename(), /\.md$/);
 
   assert.deepEqual(errors, []);
-  console.log('Adaptive browser smoke passed: home, persistent resident model, scoped PII, multi-PDF, review and inspector.');
+  console.log('Adaptive browser smoke passed: model, scoped PII, multi-PDF, multi-page incremental review, reanalysis, keyboard and protected download.');
 } finally {
   await browser.close();
 }
