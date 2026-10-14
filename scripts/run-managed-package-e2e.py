@@ -17,6 +17,7 @@ import re
 import signal
 import socket
 import subprocess
+import tempfile
 import time
 from typing import Any, Mapping, Sequence
 from urllib.error import HTTPError, URLError
@@ -361,6 +362,11 @@ def validate_summary(
         errors.append(
             "redactguard_health_not_online"
         )
+    if (
+        not summary.get("expected_public_model_id")
+        or health.get("model") != summary.get("expected_public_model_id")
+    ):
+        errors.append("selected_model_identity_mismatch")
     if health.get("korgis_mode") != "managed":
         errors.append(
             "redactguard_not_in_managed_mode"
@@ -530,6 +536,8 @@ def run(
     api_log = None
     cleanup: dict[str, Any] = {}
     evidence: dict[str, Any] = {}
+    private_preference_root = tempfile.TemporaryDirectory(prefix="redactguard-e2e-")
+    ephemeral_preferences = Path(private_preference_root.name) / "model-selection.json"
     try:
         korgis_process, korgis_log = _start_process(
             [
@@ -554,6 +562,19 @@ def run(
             timeout=startup_timeout,
         )
 
+        identity_status, identity = _request_json(
+            f"http://127.0.0.1:{korgis_port}/v1/runtime/identity",
+            timeout=15,
+        )
+        if identity_status != 200 or identity.get("protocol_version") != "local-llm-identity-v1":
+            raise E2EError("packaged Korgis public identity is unavailable or incompatible")
+        identity_models = identity.get("models")
+        entry = identity_models.get(model) if isinstance(identity_models, Mapping) else None
+        public_model = entry.get("model") if isinstance(entry, Mapping) else None
+        public_model_id = public_model.get("id") if isinstance(public_model, Mapping) else None
+        if not isinstance(public_model_id, str) or not public_model_id:
+            raise E2EError("Korgis registry startup key has no public inference model ID")
+
         env = os.environ.copy()
         env.update(
             {
@@ -562,7 +583,13 @@ def run(
                     "http://127.0.0.1:"
                     f"{korgis_port}/v1"
                 ),
-                "KORGIS_MODEL": model,
+                # Korgis CLI --model uses registry key; RedactGuard
+                # inference/health use the public model identifier.
+                "KORGIS_MODEL": public_model_id,
+                # Never consume or overwrite the user's own preference.
+                "REDACTGUARD_MODEL_PREFERENCE_FILE": str(
+                    ephemeral_preferences
+                ),
             }
         )
         api_process, api_log = _start_process(
@@ -667,6 +694,8 @@ def run(
             else {}
         )
         evidence = {
+            "expected_public_model_id": public_model_id,
+            "korgis_startup_key_matches_identity": True,
             "health": {
                 "status": health.get(
                     "status"
@@ -738,6 +767,7 @@ def run(
             api_log.close()
         if korgis_log is not None:
             korgis_log.close()
+        private_preference_root.cleanup()
 
     result: dict[str, Any] = {
         "schema_version": 1,
