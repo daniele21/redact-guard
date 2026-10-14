@@ -327,7 +327,10 @@ mod tests {
             4301,
         );
         let korgis = build_korgis_command(python, 4302, "synthetic");
-        let api_env = api.get_envs().find(|(key, _)| key == std::ffi::OsStr::new("PYTHONPATH")).unwrap();
+        let api_env = api
+            .get_envs()
+            .find(|(key, _)| key == std::ffi::OsStr::new("PYTHONPATH"))
+            .unwrap();
         let korgis_env = korgis
             .get_envs()
             .find(|(key, _)| key == std::ffi::OsStr::new("PYTHONPATH"))
