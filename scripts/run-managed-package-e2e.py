@@ -651,23 +651,10 @@ def run(
             raise E2EError(
                 "document summary endpoint failed"
             )
-        (
-            resource_status,
-            resource_state,
-        ) = _request_json(
-            (
-                "http://127.0.0.1:"
-                f"{korgis_port}"
-                "/api/v1/resources"
-            ),
-            timeout=10,
-        )
-        if resource_status != 200:
-            raise E2EError(
-                "packaged Korgis resource "
-                "endpoint failed"
-            )
-
+        # Korgis's optional admin API is intentionally disabled in the
+        # desktop package: it has no integrated authentication. Request
+        # telemetry is provided through the public inference response and
+        # the RedactGuard document summary, not /api/v1/resources.
         resources = document_summary.get(
             "resources"
         )
@@ -675,17 +662,6 @@ def run(
             dict(resources)
             if isinstance(
                 resources,
-                Mapping,
-            )
-            else {}
-        )
-        observation = resource_state.get(
-            "observation"
-        )
-        observation = (
-            observation
-            if isinstance(
-                observation,
                 Mapping,
             )
             else {}
@@ -746,17 +722,9 @@ def run(
                 "document_content_retained": False,
                 "findings_retained": False,
             },
-            "korgis_control_plane": {
-                "policy_state": (
-                    resource_state.get(
-                        "policy_state"
-                    )
-                ),
-                "observation_schema_version": (
-                    observation.get(
-                        "schema_version"
-                    )
-                ),
+            "korgis_evidence_boundary": {
+                "source": "document_inference_response",
+                "unauthenticated_admin_required": False,
             },
         }
     finally:
