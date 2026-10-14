@@ -137,6 +137,14 @@ await page.route('**/api/**', async route => {
       stats: { total_findings: 1, total_fields_redacted: 1, total_fields_kept: 0, total_fields_not_pii: 0, reviewed_findings: 1 },
     });
   }
+  if (path.startsWith('/export/') && method === 'GET' && !path.endsWith('/report')) {
+    return route.fulfill({
+      status: 200,
+      contentType: 'text/markdown; charset=utf-8',
+      headers: { 'content-disposition': 'attachment; filename="synthetic-protected.md"' },
+      body: 'Contratto: [REDACTED_PRIVATE_PERSON].',
+    });
+  }
   if (path === '/cache' && method === 'DELETE') return response(route, { cleared: true });
   return response(route, { detail: 'Synthetic browser endpoint is not defined: ' + path }, 404);
 });
@@ -195,6 +203,43 @@ try {
   await page.getByRole('button', { name: /Conferma ed esporta/ }).waitFor();
   assert.equal(await page.getByRole('button', { name: /Conferma ed esporta/ }).isDisabled(), true);
   await snap('06-isolated-unanalysed-document');
+
+  // Inspect source without inadvertently changing the privacy-safe decision.
+  await page.getByRole('complementary', { name: 'Documenti della sessione' })
+    .getByRole('button', { name: /primo.pdf/ }).click();
+  const originalCanvas = page.getByLabel('Testo originale del documento');
+  const sourceFinding = originalCanvas.getByRole('button', { name: /Decisione attuale: Oscura/ });
+  await sourceFinding.waitFor();
+  assert.match(await sourceFinding.textContent(), /Mario Rossi/);
+  await sourceFinding.focus();
+  await page.keyboard.press('Enter');
+  await originalCanvas.getByRole('button', { name: /Decisione attuale: Mantieni/ }).waitFor();
+  await page.keyboard.press('Enter');
+  await sourceFinding.waitFor();
+  await snap('07-source-verification');
+
+  // Smaller Mac windows must preserve an operable review and avoid horizontal clipping.
+  await page.setViewportSize({ width: 960, height: 700 });
+  await page.getByRole('heading', { name: 'Revisione del documento' }).waitFor();
+  const horizontalOverflow = await page.evaluate(() =>
+    document.documentElement.scrollWidth > window.innerWidth + 2
+  );
+  assert.equal(horizontalOverflow, false, 'Review should not overflow horizontally in a compact desktop window');
+  await snap('08-compact-review');
+  await page.setViewportSize({ width: 1440, height: 900 });
+
+  await page.getByRole('button', { name: /Conferma ed esporta/ }).waitFor();
+  assert.equal(await page.getByRole('button', { name: /Conferma ed esporta/ }).isDisabled(), false);
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: /Conferma ed esporta/ }).click();
+  await page.getByRole('heading', { name: 'Revisione completata' }).waitFor();
+  await page.getByText('Contratto: [REDACTED_PRIVATE_PERSON].').waitFor();
+  await snap('09-protected-markdown');
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('button', { name: /Scarica documento protetto/ }).click(),
+  ]);
+  assert.match(download.suggestedFilename(), /\.md$/);
 
   assert.deepEqual(errors, []);
   console.log('Adaptive browser smoke passed: home, persistent resident model, scoped PII, multi-PDF, review and inspector.');
