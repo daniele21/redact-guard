@@ -181,7 +181,7 @@ export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyR
   };
 
   return (
-    <section className="flex min-h-[660px] flex-1 flex-col" aria-label="Revisione documento">
+    <section className="flex min-h-0 flex-1 flex-col" aria-label="Revisione documento">
       <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-5 lg:px-9">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Revisione del documento</h1>
@@ -222,7 +222,7 @@ export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyR
           {!state.analysisErrors[page] && result?.warning && <div role="alert" className="flex items-center gap-2 rounded-xl border border-warning/30 bg-warning/10 p-4 text-sm text-warning"><AlertTriangle size={19} aria-hidden="true" /> {result.warning}</div>}
           {state.isAnalyzing && <p role="status" className="rounded-xl bg-primary/5 p-3 text-sm text-primary">Analisi locale in corso {state.currentAnalyzingPage ? '· pagina ' + state.currentAnalyzingPage : ''}…</p>}
 
-          <div className="min-h-[540px] flex-1 overflow-y-auto rounded-2xl border border-outline-variant/70 bg-surface-container-lowest p-2">
+          <div className="min-h-[280px] flex-1 overflow-y-auto rounded-2xl border border-outline-variant/70 bg-surface-container-lowest p-2 lg:min-h-[320px]">
             {pageData ? <DocumentPanel
               text={pageData.text}
               fields={result?.pii_fields ?? []}
@@ -232,10 +232,10 @@ export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyR
               pageNumber={page}
             /> : <div className="flex min-h-[400px] items-center justify-center text-sm text-on-surface-variant">Nessuna pagina disponibile</div>}
           </div>
-          <p className="text-xs text-on-surface-variant">Anteprima del testo estratto dal PDF, non del layout PDF originale. Le evidenziazioni rappresentano risultati del modello, non garanzie di completezza.</p>
+          <p className="text-xs text-on-surface-variant">Testo originale estratto dal PDF, visibile solo nel documento locale. Le evidenziazioni indicano la decisione di export (blu: oscura; ambra: mantieni). La lista laterale resta mascherata. L'AI può non trovare tutti i dati sensibili.</p>
         </div>
 
-        {inspectorOpen && <aside id="pii-inspector" aria-label="Rilevamenti e decisioni" className="rg-context-card flex min-h-[500px] flex-col rounded-2xl p-4">
+        {inspectorOpen && <aside id="pii-inspector" aria-label="Rilevamenti e decisioni" className="rg-context-card flex min-h-[260px] flex-col rounded-2xl p-4">
           <div className="mb-4">
             <h2 className="text-lg font-semibold">Rilevamenti</h2>
             <p className="mt-1 text-xs leading-5 text-on-surface-variant">Valori mascherati nell’elenco. Scegli una voce per verificarla nel documento.</p>
