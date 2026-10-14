@@ -15,16 +15,20 @@ export function ExportStep({ state, onReset, onResetLabel = 'Nuovo documento' }:
   const [copyError, setCopyError] = useState('');
   const [showClientReport, setShowClientReport] = useState(false);
   
-  const handleDownload = () => {
-    if (!state.docId) return;
-    const url = api.exportDocumentUrl(state.docId);
-    // Create an invisible anchor to trigger download
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = '';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+  const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState('');
+
+  const handleDownload = async () => {
+    if (!state.docId || downloading) return;
+    setDownloading(true);
+    setDownloadError('');
+    try {
+      await api.downloadProtectedDocument(state.docId, state.filename);
+    } catch (cause) {
+      setDownloadError(cause instanceof Error ? cause.message : 'Impossibile esportare il documento.');
+    } finally {
+      setDownloading(false);
+    }
   };
 
   const handleDownloadClientReport = () => {
@@ -165,11 +169,13 @@ export function ExportStep({ state, onReset, onResetLabel = 'Nuovo documento' }:
 
         <div className="grid sm:grid-cols-2 gap-3 pt-2">
           <button
-            onClick={handleDownload}
+            type="button"
+            disabled={downloading}
+            onClick={() => { void handleDownload(); }}
             className="flex items-center gap-3 px-6 py-4 bg-primary text-on-primary rounded-2xl font-bold hover:bg-primary-container shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all justify-center"
           >
             <Download className="w-5 h-5" />
-            Scarica documento protetto (.md)
+            {downloading ? 'Preparazione Markdown…' : 'Scarica documento protetto (.md)'}
           </button>
 
           <button
@@ -181,6 +187,8 @@ export function ExportStep({ state, onReset, onResetLabel = 'Nuovo documento' }:
             Visualizza report di protezione
           </button>
         </div>
+
+        {downloadError && <p role="alert" className="text-sm text-error">{downloadError}</p>}
 
         <div className="flex justify-center">
           <button
