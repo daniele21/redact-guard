@@ -250,6 +250,28 @@ export const api = {
     return res.json();
   },
 
+  downloadProtectedDocument: async (docId: string, originalFilename: string): Promise<void> => {
+    const base = await getBase();
+    const res = await fetch(`${base}/export/${encodeURIComponent(docId)}?format=md`, { cache: 'no-store' });
+    if (!res.ok) throw new Error(await errorMessage(res, 'Impossibile esportare il documento.'));
+
+    const stem = originalFilename.replace(/\.pdf$/i, '')
+      .replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^[._]+|[._]+$/g, '') || 'document';
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    try {
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = stem + '_protected.md';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } finally {
+      // Browsers can defer the navigation after link.click().
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    }
+  },
+
   exportDocumentUrl: (docId: string): string => {
     return `${API_BASE}/export/${docId}?format=md`;
   },
