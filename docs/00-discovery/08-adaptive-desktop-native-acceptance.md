@@ -26,7 +26,7 @@ python3 scripts/run-managed-package-e2e.py \
   --output-dir "./local-evidence"
 ```
 
-The runner starts the packaged managed Korgis process and API on loopback, analyzes its own generated synthetic PDF, checks runtime identity, CPU/RAM evidence provenance, and graceful cleanup. Its `managed-package-e2e-summary.json` is the canonical machine-readable evidence. **Do not upload raw logs**, model caches, documents, access tokens or personal paths. Review the bounded JSON before sharing. The runner intentionally does not use the optional unauthenticated Korgis admin API.
+The runner starts the packaged managed Korgis process and API on loopback, looks up the **public model ID** for the supplied startup registry key using Korgis' public identity endpoint, isolates the test's model preference from the user's personal configuration, analyzes its own generated synthetic PDF, checks model identity, CPU/RAM evidence provenance, and graceful cleanup. Its `managed-package-e2e-summary.json` is the canonical machine-readable evidence. **Do not upload raw logs**, model caches, documents, access tokens or personal paths. Review the bounded JSON before sharing. The runner intentionally does not use the optional unauthenticated Korgis admin API.
 
 Accept only if: matching manifest/source commits, managed mode online with expected model, at least one inference request with compatible evidence, attributable resource source reported, no hard kill, and `status=PASS`. A PASS here still does not prove accessibility, real-user comprehension, detection recall, signed distribution or Mac thermal behavior.
 
