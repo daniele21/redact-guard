@@ -5,6 +5,7 @@ import type { PIIField, ReviewDecision } from '../../types';
 import { DocumentPanel } from './DocumentPanel';
 import { fieldId } from './reviewIdentity';
 import { reviewReadiness } from './reviewGate';
+import { reconcilePageVisits } from './reviewVisits';
 
 export interface ReviewDraft {
   decisions: Record<string, ReviewDecision>;
@@ -51,17 +52,14 @@ export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyR
   const pageData = state.pages.find(item => item.page_number === page);
   const total = state.pages.length;
 
-  // New or re-run detection invalidates the old page-visit evidence.
+  // Invalidate review evidence only for reanalysed/failed pages. Incremental
+  // analysis of page N must not un-review already inspected pages 1..N-1.
   useEffect(() => {
-    const changed = resultRef.current !== state.analysisResults;
+    const previousResults = resultRef.current;
     resultRef.current = state.analysisResults;
-    setVisitedPages(previous => {
-      if (changed) return state.analysisResults[page] && !state.analysisErrors[page] ? new Set([page]) : new Set();
-      if (!state.analysisResults[page] || state.analysisErrors[page] || previous.has(page)) return previous;
-      const next = new Set(previous);
-      next.add(page);
-      return next;
-    });
+    setVisitedPages(previous =>
+      reconcilePageVisits(previous, previousResults, state.analysisResults, state.analysisErrors, page)
+    );
   }, [state.analysisResults, state.analysisErrors, page]);
 
   useEffect(() => {
