@@ -11,6 +11,16 @@ This document separates three kinds of proof. A green PR build is not a real-dev
 - macOS CI must start the **packaged API launcher** and import both the API and Korgis Python modules from their isolated paths. It does not execute real model inference or exercise the desktop WebView as a human.
 - `unittest discover` runs tests for the packaged E2E evidence contract, including the prohibition on relying on Korgis's unauthenticated administrative API.
 
+## Shared Mac validation (trusted source commits only)
+
+The source-owned bounded lane is `.github/ci/local-test.sh`; `.github/workflows/local-ci.yml` dispatches an exact trusted `main` or `dev` commit to `daniele21/local-runner-infra`. This **does not** run this draft PR's head SHA because the central Mac executor rejects commits not reachable from a trusted source branch. It is not a substitute for the hosted PR Rust/frontend/backend/macOS bundle jobs or for native model inference and visual accessibility tests.
+
+- The script runs macOS ARM64 preflight, Bash/Rust formatting, Node 22+ pure review and document queue regressions, backend unittest and managed Korgis packaging contract. It installs only lightweight backend test dependencies into a disposable local venv, with no global writes or model downloads. Missing tools fail the lane.
+- A successful source **dispatch** is not a test success. Inspect the originating commit's `local-ci/mac` status and the central `Central Local CI` run logs.
+- At the initial onboarding check on 2026-10-14, RedactGuard's source dispatch runs failed **before** central execution with `GH_TOKEN` empty (missing `CENTRAL_DISPATCH_TOKEN` Actions secret). The visible central workflow includes RedactGuard in its allowlist and tests for other repositories succeeded. This credential/configuration gate must be fixed via the repository's protected Actions Secrets, never by placing tokens in code.
+- Preserve the central host's Terraform state on the original Mac, and do not create runner registrations in RedactGuard or weaken the central trusted-ancestry guard.
+- The source `local-test.sh` becomes runnable centrally only after the candidate is independently reviewed and promoted through the repository's normal approved integration procedure to a trusted branch. Do not promote a blocked release candidate purely to obtain Mac runner access.
+
 ## 2. Packaged-model E2E on a representative Mac (REAL_ENVIRONMENT)
 
 Requirements: Apple Silicon Mac, downloaded and approved Korgis model that is actually available to the local registry, packaged `RedactGuard.app`, Python 3.13 for the evidence runner, and exact source commit / Korgis pin.
