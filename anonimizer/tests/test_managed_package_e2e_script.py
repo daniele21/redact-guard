@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import importlib.util
+import inspect
+import unittest
 from pathlib import Path
 
 
@@ -60,39 +62,32 @@ def _valid_summary():
     }
 
 
-def test_synthetic_pdf_is_bounded_and_synthetic():
-    payload = module._synthetic_pdf_bytes()
+class ManagedPackageEvidenceTests(unittest.TestCase):
+    def test_synthetic_pdf_is_bounded_and_synthetic(self):
+        payload = module._synthetic_pdf_bytes()
+        self.assertTrue(payload.startswith(b"%PDF-1.4"))
+        self.assertIn(b"mario.rossi@example.test", payload)
+        self.assertLess(len(payload), 4096)
 
-    assert payload.startswith(b"%PDF-1.4")
-    assert b"mario.rossi@example.test" in payload
-    assert len(payload) < 4096
+    def test_managed_package_summary_accepts_complete_evidence(self):
+        self.assertEqual(module.validate_summary(_valid_summary()), [])
+
+    def test_managed_package_summary_rejects_wrong_korgis_commit(self):
+        summary = _valid_summary()
+        summary["package_manifest"]["source_commit"] = "d" * 40
+        self.assertIn("packaged_korgis_commit_mismatch", module.validate_summary(summary))
+
+    def test_managed_package_summary_requires_resource_evidence(self):
+        summary = _valid_summary()
+        summary["document"]["resources"]["evidence_requests"] = 0
+        self.assertIn("no_resource_evidence_requests", module.validate_summary(summary))
+
+    def test_e2e_never_requires_disabled_unauthenticated_admin_api(self):
+        runner = inspect.getsource(module.run)
+        self.assertNotIn('"/api/v1/resources"', runner)
+        self.assertNotIn("resource_state =", runner)
+        self.assertIn('"source": "document_inference_response"', runner)
 
 
-def test_managed_package_summary_accepts_complete_evidence():
-    assert module.validate_summary(
-        _valid_summary()
-    ) == []
-
-
-def test_managed_package_summary_rejects_wrong_korgis_commit():
-    summary = _valid_summary()
-    summary["package_manifest"][
-        "source_commit"
-    ] = "d" * 40
-
-    assert (
-        "packaged_korgis_commit_mismatch"
-        in module.validate_summary(summary)
-    )
-
-
-def test_managed_package_summary_requires_resource_evidence():
-    summary = _valid_summary()
-    summary["document"]["resources"][
-        "evidence_requests"
-    ] = 0
-
-    assert (
-        "no_resource_evidence_requests"
-        in module.validate_summary(summary)
-    )
+if __name__ == "__main__":
+    unittest.main()
