@@ -8,6 +8,7 @@ from services.analysis_summary import build_document_summary
 from services.client_report import render_client_report
 from services.redaction_engine import apply_redaction_to_document
 from services.session_store import get_session
+from services.export_readiness import ReviewNotReady, ensure_export_attested
 
 router = APIRouter()
 
@@ -35,25 +36,31 @@ def export_document(doc_id: str, format: str = "md"):
             detail="Only markdown (md) format is currently supported.",
         )
 
-    request = RedactRequest(fields_to_redact=[])
-    redacted_pages = apply_redaction_to_document(session, request)
-
-    output_lines = []
-    for page in redacted_pages:
-        output_lines.append(page.text)
-        output_lines.append("\n\n---\n\n")
-
-    markdown_content = "".join(output_lines)
-    safe_name = _safe_export_stem(session.original_filename)
-    export_filename = f"{safe_name}_protected.md"
-
-    return PlainTextResponse(
-        content=markdown_content,
-        headers={
-            "Content-Disposition": f'attachment; filename="{export_filename}"'
-        },
-    )
-
+    with session.operation_lock:
+        try:
+            ensure_export_attested(session)
+        except ReviewNotReady as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+    
+        request = RedactRequest(fields_to_redact=[])
+        redacted_pages = apply_redaction_to_document(session, request)
+    
+        output_lines = []
+        for page in redacted_pages:
+            output_lines.append(page.text)
+            output_lines.append("\n\n---\n\n")
+    
+        markdown_content = "".join(output_lines)
+        safe_name = _safe_export_stem(session.original_filename)
+        export_filename = f"{safe_name}_protected.md"
+    
+        return PlainTextResponse(
+            content=markdown_content,
+            headers={
+                "Content-Disposition": f'attachment; filename="{export_filename}"'
+            },
+        )
+    
 
 @router.get("/export/{doc_id}/report", response_class=HTMLResponse)
 def export_client_report(doc_id: str, download: bool = False):
@@ -65,13 +72,15 @@ def export_client_report(doc_id: str, download: bool = False):
             detail="Document session not found or expired.",
         )
 
-    summary = build_document_summary(session)
-    report = render_client_report(summary)
-    safe_name = _safe_export_stem(session.original_filename)
-    headers = {}
-    if download:
-        headers["Content-Disposition"] = (
-            f'attachment; filename="{safe_name}_protection_report.html"'
-        )
-
-    return HTMLResponse(content=report, headers=headers)
+    with session.operation_lock:
+        summary = build_document_summary(session)
+        report = render_client_report(summary)
+        safe_name = _safe_export_stem(session.original_filename)
+        headers = {}
+        if download:
+            headers["Content-Disposition"] = (
+                f'attachment; filename="{safe_name}_protection_report.html"'
+            )
+    
+        return HTMLResponse(content=report, headers=headers)
+    

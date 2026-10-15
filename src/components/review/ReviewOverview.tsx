@@ -2,10 +2,12 @@ import React, { useMemo } from 'react';
 import {
   AlertTriangle,
   CheckCircle2,
+  Cpu,
   FileSearch,
   Layers,
   ListChecks,
   LockKeyhole,
+  MemoryStick,
   ShieldCheck,
 } from 'lucide-react';
 import { DocumentState } from '../../hooks/useDocument';
@@ -254,6 +256,92 @@ export function ReviewOverview({
           </div>
         </section>
 
+        {state.summary?.resources &&
+          (state.summary.resources.inference_requests > 0 ||
+            state.summary.resources.cache_hits > 0) && (
+          <section className="bg-surface-container-lowest border border-outline-variant rounded-[2rem] p-6">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-5">
+              <div>
+                <h3 className="font-bold text-on-surface">Local AI run</h3>
+                <p className="text-xs text-on-surface-variant mt-1">
+                  Korgis execution evidence for this document
+                </p>
+              </div>
+              <span className="text-[11px] font-semibold px-3 py-1 rounded-full bg-surface-container text-on-surface-variant self-start">
+                {state.summary.resources.evidence_requests} / {state.summary.resources.inference_requests} requests measured
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <RunMetric
+                icon={MemoryStick}
+                label="Peak process RAM"
+                value={formatBytes(state.summary.resources.peak_memory_bytes)}
+              />
+              <RunMetric
+                icon={MemoryStick}
+                label="Peak RAM delta"
+                value={formatBytes(state.summary.resources.peak_memory_delta_bytes)}
+              />
+              <RunMetric
+                icon={Cpu}
+                label="Average CPU"
+                value={formatPercent(state.summary.resources.average_cpu_percent)}
+              />
+              <RunMetric
+                icon={Cpu}
+                label="Peak CPU"
+                value={formatPercent(state.summary.resources.peak_cpu_percent)}
+              />
+            </div>
+
+            <details className="mt-4 rounded-xl bg-surface-container px-4 py-3 text-xs text-on-surface-variant">
+              <summary className="cursor-pointer font-semibold text-on-surface">
+                Evidence details
+              </summary>
+              <div className="mt-3 grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div>
+                  <span className="block text-outline">Inference requests</span>
+                  <strong className="text-on-surface">{state.summary.resources.inference_requests}</strong>
+                </div>
+                <div>
+                  <span className="block text-outline">Cache hits</span>
+                  <strong className="text-on-surface">{state.summary.resources.cache_hits}</strong>
+                </div>
+                <div>
+                  <span className="block text-outline">Attribution</span>
+                  <strong className="text-on-surface">
+                    {state.summary.resources.attribution_qualities.join(', ') || 'unavailable'}
+                  </strong>
+                </div>
+                <div>
+                  <span className="block text-outline">Scope</span>
+                  <strong className="text-on-surface">
+                    {state.summary.resources.attribution_scopes.join(', ') || 'unavailable'}
+                  </strong>
+                </div>
+                <div>
+                  <span className="block text-outline">Memory source</span>
+                  <strong className="text-on-surface">
+                    {formatEvidenceSources(state.summary.resources.memory_sources)}
+                  </strong>
+                </div>
+                <div>
+                  <span className="block text-outline">CPU source</span>
+                  <strong className="text-on-surface">
+                    {formatEvidenceSources(state.summary.resources.cpu_sources)}
+                  </strong>
+                </div>
+              </div>
+              {state.summary.resources.attribution_qualities.includes('process_global') && (
+                <p className="mt-3 text-outline">
+                  CPU and RAM are measured for the Korgis process tree and are not claimed as request-exclusive when work overlaps.
+                </p>
+              )}
+            </details>
+          </section>
+        )}
+
         {Object.keys(state.analysisErrors).length > 0 && (
           <section className="bg-error/5 border border-error/20 rounded-2xl p-5">
             <div className="flex items-start gap-3">
@@ -326,4 +414,48 @@ function DecisionRow({
       <strong className="text-on-surface">{value}</strong>
     </div>
   );
+}
+
+
+function RunMetric({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-2xl bg-surface-container p-4 border border-outline-variant/50">
+      <div className="flex items-center gap-2 text-on-surface-variant">
+        <Icon className="w-4 h-4" />
+        <span className="text-xs font-semibold">{label}</span>
+      </div>
+      <div className="text-xl font-bold text-on-surface mt-2">{value}</div>
+    </div>
+  );
+}
+
+function formatBytes(value: number | null): string {
+  if (value === null) return 'Unavailable';
+  const gib = value / (1024 ** 3);
+  if (gib >= 0.1) return `${gib.toFixed(2)} GB`;
+  return `${(value / (1024 ** 2)).toFixed(0)} MB`;
+}
+
+function formatPercent(value: number | null): string {
+  return value === null ? 'Unavailable' : `${value.toFixed(1)}%`;
+}
+
+
+function formatEvidenceSources(sources: string[]): string {
+  if (!sources.length) return 'Unavailable';
+  return sources
+    .map((source) =>
+      source.startsWith('ps_process_tree')
+        ? 'Korgis process-tree sampler'
+        : source
+    )
+    .join(', ');
 }

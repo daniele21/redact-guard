@@ -1,4 +1,5 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from threading import RLock
 from datetime import datetime
 from enum import Enum
 
@@ -98,6 +99,12 @@ class DocumentSession:
     page_diagnostics: dict[int, DetectionDiagnostics | None]
     created_at: datetime
     last_accessed_at: datetime
+    model_key: str = ""  # Frozen when uploaded; legacy tests use the configured default.
+    policy_types: list[PIITypeDefinition] | None = None
+    policy_prompt: str | None = None
+    policy_digest: str = ""
+    review_attested: bool = False
+    operation_lock: RLock = field(default_factory=RLock, repr=False, compare=False)
 
 
 class UploadResponsePage(BaseModel):
@@ -110,6 +117,8 @@ class UploadResponse(BaseModel):
     doc_id: str
     page_count: int
     profile: str
+    model: str = ""
+    policy_digest: str = ""
     pages: list[UploadResponsePage]
 
 
@@ -137,6 +146,23 @@ class CategoryAnalysisSummary(BaseModel):
     occurrence_count: int
 
 
+class DocumentResourceSummary(BaseModel):
+    inference_requests: int = 0
+    cache_hits: int = 0
+    evidence_requests: int = 0
+    peak_memory_bytes: int | None = None
+    peak_memory_delta_bytes: int | None = None
+    average_cpu_percent: float | None = None
+    peak_cpu_percent: float | None = None
+    cpu_sample_count: int | None = None
+    sampling_interval_ms: int | None = None
+    cpu_observation_ms: float | None = None
+    memory_sources: list[str] = Field(default_factory=list)
+    cpu_sources: list[str] = Field(default_factory=list)
+    attribution_scopes: list[str] = Field(default_factory=list)
+    attribution_qualities: list[str] = Field(default_factory=list)
+
+
 class DocumentAnalysisSummary(BaseModel):
     document_id: str
     filename: str
@@ -156,6 +182,7 @@ class DocumentAnalysisSummary(BaseModel):
     page_status: dict[int, str]
     page_errors: dict[int, str]
     entities: list[SensitiveEntitySummary]
+    resources: DocumentResourceSummary = Field(default_factory=DocumentResourceSummary)
     local_processing: bool = True
 
 
@@ -168,6 +195,7 @@ class RedactRequestItem(BaseModel):
 
 class RedactRequest(BaseModel):
     fields_to_redact: list[RedactRequestItem]
+    review_attested: bool = False
 
 
 class RedactedPage(BaseModel):

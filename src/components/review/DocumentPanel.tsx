@@ -24,7 +24,9 @@ export function DocumentPanel({
   // Filter out excluded fields
   const activeFields = fields.filter(f => !excludedFields.has(fieldId(f, pageNumber)));
 
-  const validFields = activeFields.filter(f => f.start !== null && f.end !== null);
+  const validFields = activeFields.filter(f =>
+    f.start !== null && f.end !== null && f.start >= 0 && f.end > f.start && f.end <= text.length
+  );
   validFields.sort((a, b) => (a.start as number) - (b.start as number));
 
   const renderText = () => {
@@ -38,6 +40,9 @@ export function DocumentPanel({
     validFields.forEach((field, i) => {
       const start = field.start as number;
       const end = field.end as number;
+
+      // Overlapping proposals must not duplicate source content in the canvas.
+      if (start < lastIndex) return;
 
       // Add text before this field
       if (start > lastIndex) {
@@ -79,7 +84,7 @@ export function DocumentPanel({
   };
 
   return (
-    <div className="bg-surface-container-lowest rounded-2xl border border-outline-variant p-8 min-h-[600px] shadow-sm overflow-y-auto font-mono text-sm leading-relaxed">
+    <div aria-label="Testo originale del documento" className="h-full min-h-[220px] overflow-auto rounded-2xl border border-outline-variant bg-surface-container-lowest p-4 font-mono text-sm leading-7 text-on-surface shadow-sm sm:p-6">
       {renderText()}
     </div>
   );

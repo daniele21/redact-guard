@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from config import config
 from api.routes_health import router as health_router
+from api.routes_models import router as model_router
 from api.routes_upload import router as upload_router
 from api.routes_profiles import router as profiles_router
 from api.routes_analyze import router as analyze_router
@@ -56,6 +57,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(health_router, prefix="/api", tags=["Health"])
+app.include_router(model_router, prefix="/api", tags=["Models"])
 app.include_router(upload_router, prefix="/api", tags=["Document"])
 app.include_router(profiles_router, prefix="/api", tags=["Profiles"])
 app.include_router(analyze_router, prefix="/api", tags=["Analyze"])

@@ -9,6 +9,8 @@ import {
   PIITypeDefinition,
   HealthResponse,
   DocumentAnalysisSummary,
+  LocalModelCatalog,
+  ScopedPolicyDetail,
 } from '../types';
 
 let API_BASE = '/api';
@@ -117,7 +119,7 @@ export const api = {
     const res = await fetch(`${base}/redact/${docId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fields_to_redact: fieldsToRedact }),
+      body: JSON.stringify({ fields_to_redact: fieldsToRedact, review_attested: true }),
     });
     if (!res.ok) {
       throw new Error(await errorMessage(res, 'Failed to apply review decisions'));
@@ -136,6 +138,42 @@ export const api = {
     const base = await getBase();
     const res = await fetch(`${base}/profiles/${name}`);
     if (!res.ok) throw new Error('Failed to fetch profile detail');
+    return res.json();
+  },
+
+  getScopedPolicy: async (profile: string): Promise<ScopedPolicyDetail> => {
+    const base = await getBase();
+    const res = await fetch(`${base}/profiles/${encodeURIComponent(profile)}/policy`, { cache: 'no-store' });
+    if (!res.ok) throw new Error(await errorMessage(res, 'Cannot load PII policy'));
+    return res.json();
+  },
+
+  saveScopedVariant: async (profile: string, key: string, description: string, label: string): Promise<ScopedPolicyDetail> => {
+    const base = await getBase();
+    const res = await fetch(`${base}/profiles/${encodeURIComponent(profile)}/variants/${encodeURIComponent(key)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ description, label, enabled: true }),
+    });
+    if (!res.ok) throw new Error(await errorMessage(res, 'Cannot save PII variant'));
+    return res.json();
+  },
+
+  restoreScopedVariant: async (profile: string, key: string): Promise<ScopedPolicyDetail> => {
+    const base = await getBase();
+    const res = await fetch(`${base}/profiles/${encodeURIComponent(profile)}/variants/${encodeURIComponent(key)}/restore`, {
+      method: 'POST',
+    });
+    if (!res.ok) throw new Error(await errorMessage(res, 'Cannot restore PII definition'));
+    return res.json();
+  },
+
+  revertScopedVariant: async (profile: string, key: string, revision: number): Promise<ScopedPolicyDetail> => {
+    const base = await getBase();
+    const res = await fetch(`${base}/profiles/${encodeURIComponent(profile)}/variants/${encodeURIComponent(key)}/revert/${revision}`, {
+      method: 'POST',
+    });
+    if (!res.ok) throw new Error(await errorMessage(res, 'Cannot restore PII revision'));
     return res.json();
   },
 
@@ -186,6 +224,52 @@ export const api = {
       { method: 'DELETE' },
     );
     if (!res.ok) throw new Error('Failed to remove custom type');
+  },
+
+  clearCache: async (): Promise<void> => {
+    const base = await getBase();
+    const res = await fetch(`${base}/cache`, { method: 'DELETE' });
+    if (!res.ok) throw new Error(await errorMessage(res, 'Failed to clear local caches'));
+  },
+
+  getLocalModels: async (): Promise<LocalModelCatalog> => {
+    const base = await getBase();
+    const res = await fetch(`${base}/local-models`, { cache: 'no-store' });
+    if (!res.ok) throw new Error(await errorMessage(res, 'Failed to read local models'));
+    return res.json();
+  },
+
+  selectLocalModel: async (model: string): Promise<LocalModelCatalog> => {
+    const base = await getBase();
+    const res = await fetch(`${base}/local-models/selection`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model }),
+    });
+    if (!res.ok) throw new Error(await errorMessage(res, 'Failed to choose local model'));
+    return res.json();
+  },
+
+  downloadProtectedDocument: async (docId: string, originalFilename: string): Promise<void> => {
+    const base = await getBase();
+    const res = await fetch(`${base}/export/${encodeURIComponent(docId)}?format=md`, { cache: 'no-store' });
+    if (!res.ok) throw new Error(await errorMessage(res, 'Impossibile esportare il documento.'));
+
+    const stem = originalFilename.replace(/\.pdf$/i, '')
+      .replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^[._]+|[._]+$/g, '') || 'document';
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    try {
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = stem + '_protected.md';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } finally {
+      // Browsers can defer the navigation after link.click().
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    }
   },
 
   exportDocumentUrl: (docId: string): string => {
