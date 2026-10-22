@@ -1,3 +1,4 @@
+import { createBackendBaseResolver } from './backendAddress';
 import {
   UploadResponse,
   PageAnalysisResult,
@@ -14,26 +15,19 @@ import {
 } from '../types';
 
 let API_BASE = '/api';
-let _resolvePromise: Promise<string> | null = null;
 
-function resolveApiBase(): Promise<string> {
-  if (!_resolvePromise) {
-    _resolvePromise = (async () => {
-      try {
-        const { invoke } = await import('@tauri-apps/api/core');
-        const port = await invoke<number>('get_api_port');
-        API_BASE = `http://127.0.0.1:${port}/api`;
-      } catch {
-        // Dev mode with Vite proxy.
-      }
-      return API_BASE;
-    })();
-  }
-  return _resolvePromise;
-}
+// Native IPC returns null until the actual API has passed its health check.
+// Never cache an initial placeholder port or mask a native error as Vite proxy.
+const resolveApiBase = createBackendBaseResolver(
+  () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window,
+  async () => {
+    const { invoke } = await import('@tauri-apps/api/core');
+    return invoke<number | null>('get_api_port');
+  },
+);
 
 async function getBase(): Promise<string> {
-  await resolveApiBase();
+  API_BASE = await resolveApiBase();
   return API_BASE;
 }
 
