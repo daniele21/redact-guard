@@ -363,6 +363,7 @@ mod tests {
                 "1235",
                 "--model",
                 "demo",
+                "--no-download",
             ]
         );
     }
