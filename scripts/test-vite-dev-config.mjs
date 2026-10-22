@@ -11,6 +11,7 @@ test('desktop development Vite binds only to loopback and ignores generated runt
   );
   assert.ok(loaded, 'Vite config must be loadable');
   const server = loaded.config.server;
+  assert.equal(server?.host, '127.0.0.1');
   assert.equal(server?.port, 3000);
   assert.equal(server?.strictPort, true);
   assert.equal(server?.proxy?.['/api']?.target, 'http://127.0.0.1:8000');

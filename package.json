@@ -5,7 +5,7 @@
   "type": "module",
   "packageManager": "pnpm@9.15.4",
   "scripts": {
-    "dev": "vite --port=3000 --host=127.0.0.1",
+    "dev": "vite",
     "server:api": "REDACTGUARD_DEV=1 cd anonimizer && ../.venv/bin/python main.py",
     "start": "concurrently -t \"HH:mm:ss.SSS\" -n API,WEB -c \"cyan,blue\" \"pnpm server:api\" \"pnpm dev\"",
     "build": "vite build",
