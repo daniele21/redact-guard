@@ -238,6 +238,9 @@ try {
 
   await page.locator('button[title="Modelli locali e stato di Korgis"]').click();
   await page.getByRole('heading', { name: 'Il modello giusto, una sola volta.' }).waitFor();
+  await page.getByText('Qwen/Qwen3.5-4B', { exact: true }).waitFor();
+  await page.getByText('Qwen/Qwen3.5-9B', { exact: true }).waitFor();
+  assert.equal(await page.locator('input[value="Qwen/Qwen3.5-9B"]').isDisabled(), true, 'Undownloaded Qwen must not be selectable');
   await page.getByText('test-model-b', { exact: true }).first().click();
   await page.getByRole('button', { name: 'Usa questo modello' }).click();
   await page.getByText(/Modello selezionato|Scelta salvata/).waitFor();
