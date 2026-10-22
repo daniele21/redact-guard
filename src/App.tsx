@@ -22,7 +22,7 @@ const initialProfile = (): string => {
 
 export default function App() {
   const { state, documents, activeId, selectDocument, uploadFiles, importingFile, isImporting, importErrors,
-    analyzePage, batchAnalyzePages, applyRedactions, reset } = useDocument();
+    analyzePage, batchAnalyzePages, cancelAnalysis, applyRedactions, activeJobCount, reset } = useDocument();
   const { profiles, refresh: refreshProfiles } = useProfiles();
   const profilesRefreshedAfterStartup = useRef(false);
   const [screen, setScreen] = useState<Screen>('home');
@@ -141,6 +141,7 @@ export default function App() {
             title="Privacy e impostazioni" aria-label="Privacy e impostazioni"><Settings2 size={17} aria-hidden="true" /></button>
         </div>
       </header>
+      {activeJobCount > 0 && <div role="status" className="flex flex-wrap items-center justify-between gap-3 border-b border-primary/20 bg-primary/5 px-5 py-2 text-sm lg:px-9"><span>{activeJobCount} analisi {activeJobCount === 1 ? 'in coda o in corso' : 'in coda o in corso'} nel backend locale. Puoi cambiare sezione senza interromperle.</span><button type="button" className="font-medium text-primary" onClick={() => setScreen('review')}>Apri documenti</button></div>}
       {state.docId && screen !== 'review' && screen !== 'export' && (
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-outline-variant/40 bg-surface-container-low px-5 py-2 text-sm lg:px-9">
           <span className="truncate text-on-surface-variant">Sessione in corso · {documents.length} PDF · policy del documento selezionato: {state.profile}</span>
@@ -196,6 +197,7 @@ export default function App() {
               initialDraft={state.docId ? reviewDrafts[state.docId] : undefined}
               onDraftChange={saveDraft}
               onAnalyzePage={analyzePage} onBatchAnalyzePages={batchAnalyzePages}
+              onCancelAnalysis={() => cancelAnalysis(state.docId!)}
               onApplyRedactions={applyAndExport} onProceed={() => { if (state.docId) selectDocument(state.docId); setScreen('export'); }} />
             </div>
           </div>
