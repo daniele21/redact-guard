@@ -284,6 +284,8 @@ try {
   assert.equal(await page.getByRole('button', { name: /Conferma ed esporta/ }).isDisabled(), false);
   // Reanalysis must not reset the reviewed state of an unchanged page 1.
   await page.getByRole('button', { name: 'Rianalizza pagina' }).click();
+  await page.getByText(/Job locale/).waitFor();
+  await page.getByText(/Job locale/).waitFor({ state: 'hidden' });
   await page.getByText('2/2 pagine aperte').waitFor();
   await page.getByRole('button', { name: 'Pagina precedente' }).click();
   await page.getByRole('button', { name: 'Nascondi rilevamenti' }).click();
