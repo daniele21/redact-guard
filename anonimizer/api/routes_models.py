@@ -47,11 +47,19 @@ def _catalog(selected: str) -> ResidentModelCatalog:
         choices = list_catalog_models()
     except ModelCatalogUnavailable:
         choices = []
+    # The legacy first-launch preference may be a Korgis startup key rather
+    # than its public OpenAI-compatible ID. Resolve it for UI display only.
+    choice = next(
+        (item for item in choices if item["startup_key"] == selected),
+        None,
+    )
+    visible_selected = str(choice["model_id"]) if choice else selected
+    resident = visible_selected in models or bool(choice and choice["resident"])
     return ResidentModelCatalog(
-        selected_model=selected, models=models, choices=choices,
-        selected_resident=selected in models,
+        selected_model=visible_selected, models=models, choices=choices,
+        selected_resident=resident,
         discovery_available=True,
-        hardware=get_public_hardware(selected) if selected in models else None,
+        hardware=get_public_hardware(visible_selected) if resident else None,
     )
 
 
