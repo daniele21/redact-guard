@@ -1,9 +1,9 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../services/api';
 import { updateById, validatePdfCandidate, validateSessionCapacity } from './documentQueue';
 import type {
   DocumentAnalysisSummary, PageAnalysisResult, RedactRequestItem,
-  RedactedPage, UploadResponse,
+  RedactedPage, UploadResponse, AnalysisJob,
 } from '../types';
 
 export type AppStep = 'upload' | 'review' | 'export';
@@ -24,6 +24,7 @@ export interface DocumentState {
   currentAnalyzingPage: number | null;
   pendingPages: number[];
   analyzedCount: number;
+  job: AnalysisJob | null;
 }
 
 export interface ImportError {
@@ -47,6 +48,7 @@ const emptyDocument = (): DocumentState => ({
   currentAnalyzingPage: null,
   pendingPages: [],
   analyzedCount: 0,
+  job: null,
 });
 
 const fromUpload = (file: File, uploaded: UploadResponse, summary: DocumentAnalysisSummary | null): DocumentState => ({
@@ -72,6 +74,7 @@ export function useDocument() {
   const [importingFile, setImportingFile] = useState('');
   const [importErrors, setImportErrors] = useState<ImportError[]>([]);
   const importing = useRef(false);
+  const [activeJobs, setActiveJobs] = useState<Record<string, string>>({});
   const active = activeId ? byId[activeId] : undefined;
   const state = active ?? emptyDocument();
 
@@ -144,71 +147,108 @@ export function useDocument() {
     if (result.errors.length) throw new Error(result.errors[0].message);
   }, [uploadFiles]);
 
-  const analyzePage = async (pageNumber: number, force = false) => {
+  // The backend is the job owner. This hook persists above all workspace
+  // screens and polls only status metadata, fetching PII results on completion.
+  useEffect(() => {
+    if (!Object.keys(activeJobs).length) return;
+    let disposed = false;
+    let busy = false;
+    const poll = async () => {
+      if (busy || disposed) return;
+      busy = true;
+      try {
+        for (const [docId, jobId] of Object.entries(activeJobs)) {
+          if (disposed) break;
+          try {
+            const job = await api.getAnalysisJob(jobId);
+            if (disposed) break;
+            update(docId, previous => ({
+              ...previous,
+              job,
+              isAnalyzing: job.cancellable,
+              currentAnalyzingPage: job.current_page,
+              pendingPages: previous.pendingPages.filter(page => (
+                !job.completed_pages.includes(page) && !Object.prototype.hasOwnProperty.call(job.page_errors, page)
+              )),
+            }));
+            if (!job.cancellable) {
+              const results = await api.getJobResults(jobId);
+              if (disposed) break;
+              update(docId, previous => {
+                const analysisResults = { ...previous.analysisResults };
+                for (const result of results) analysisResults[result.page_number] = result;
+                return {
+                  ...previous,
+                  job,
+                  isAnalyzing: false,
+                  currentAnalyzingPage: null,
+                  pendingPages: [],
+                  analysisResults,
+                  analysisErrors: { ...previous.analysisErrors, ...job.page_errors },
+                  analyzedCount: Object.keys(analysisResults).length,
+                  redactedPages: [],
+                };
+              });
+              try { await refreshSummary(docId); } catch { /* job result remains explicit */ }
+              if (!disposed) setActiveJobs(previous => {
+                if (previous[docId] !== jobId) return previous;
+                const next = { ...previous };
+                delete next[docId];
+                return next;
+              });
+            }
+          } catch {
+            // Network interruptions do not silently mark an active job complete.
+            // Keep polling; backend status remains the authority.
+          }
+        }
+      } finally {
+        busy = false;
+      }
+    };
+    void poll();
+    const timer = setInterval(() => { void poll(); }, 1200);
+    return () => { disposed = true; clearInterval(timer); };
+  }, [activeJobs, update, refreshSummary]);
+
+  const enqueue = async (pages: number[], force = false) => {
     const docId = activeId;
-    if (!docId) return;
-    update(docId, previous => {
-      const errors = { ...previous.analysisErrors };
-      delete errors[pageNumber];
-      return { ...previous, isAnalyzing: true, currentAnalyzingPage: pageNumber, analysisErrors: errors };
-    });
+    if (!docId || !pages.length) return;
     try {
-      const result = await api.analyzePage(docId, pageNumber, force);
+      const job = await api.startAnalysisJob(docId, pages, force);
       update(docId, previous => ({
         ...previous,
-        analyzedCount: previous.analyzedCount + (previous.analysisResults[pageNumber] ? 0 : 1),
-        analysisResults: { ...previous.analysisResults, [pageNumber]: result },
-        redactedPages: [],
+        job,
+        isAnalyzing: true,
+        pendingPages: pages,
+        currentAnalyzingPage: null,
+        analysisErrors: {},
       }));
+      setActiveJobs(previous => ({ ...previous, [docId]: job.job_id }));
     } catch (cause) {
       update(docId, previous => ({
         ...previous,
         analysisErrors: {
           ...previous.analysisErrors,
-          [pageNumber]: cause instanceof Error ? cause.message : 'Analisi non riuscita.',
+          [pages[0]]: cause instanceof Error ? cause.message : 'Impossibile avviare l’analisi.',
         },
       }));
-    } finally {
-      try { await refreshSummary(docId); } catch { /* failure remains explicit in state */ }
-      update(docId, previous => ({ ...previous, isAnalyzing: false, currentAnalyzingPage: null }));
     }
   };
 
+  const analyzePage = async (pageNumber: number, force = false) => {
+    await enqueue([pageNumber], force);
+  };
+
   const batchAnalyzePages = async (pageNumbers: number[], force = false) => {
-    const docId = activeId;
-    if (!docId) return;
-    update(docId, previous => ({ ...previous, isAnalyzing: true, pendingPages: [...pageNumbers] }));
-    for (const pageNumber of pageNumbers) {
-      update(docId, previous => {
-        const errors = { ...previous.analysisErrors };
-        delete errors[pageNumber];
-        return {
-          ...previous,
-          currentAnalyzingPage: pageNumber,
-          pendingPages: previous.pendingPages.filter(number => number !== pageNumber),
-          analysisErrors: errors,
-        };
-      });
-      try {
-        const result = await api.analyzePage(docId, pageNumber, force);
-        update(docId, previous => ({
-          ...previous,
-          analyzedCount: previous.analyzedCount + (previous.analysisResults[pageNumber] ? 0 : 1),
-          analysisResults: { ...previous.analysisResults, [pageNumber]: result },
-        redactedPages: [],
-        }));
-      } catch (cause) {
-        update(docId, previous => ({
-          ...previous,
-          analysisErrors: {
-            ...previous.analysisErrors,
-            [pageNumber]: cause instanceof Error ? cause.message : 'Analisi non riuscita.',
-          },
-        }));
-      }
-      try { await refreshSummary(docId); } catch { /* no fabricated success status */ }
-    }
-    update(docId, previous => ({ ...previous, isAnalyzing: false, currentAnalyzingPage: null, pendingPages: [] }));
+    await enqueue(pageNumbers, force);
+  };
+
+  const cancelAnalysis = async (docId: string) => {
+    const jobId = activeJobs[docId];
+    if (!jobId) return;
+    const job = await api.cancelAnalysisJob(jobId);
+    update(docId, previous => ({ ...previous, job }));
   };
 
   const applyRedactions = async (decisions: RedactRequestItem[]) => {
@@ -220,17 +260,20 @@ export function useDocument() {
   };
 
   const reset = useCallback(() => {
+    for (const jobId of Object.values(activeJobs)) { void api.cancelAnalysisJob(jobId).catch(() => {}); }
+    setActiveJobs({});
     setById({});
     setOrder([]);
     setActiveId(null);
     setImportErrors([]);
-  }, []);
+  }, [activeJobs]);
 
   return {
     state,
     documents: order.map(id => byId[id]).filter((item): item is DocumentState => Boolean(item)),
     activeId, selectDocument: setActiveId,
     upload, uploadFiles, importingFile, isImporting, importErrors,
-    analyzePage, batchAnalyzePages, applyRedactions, refreshSummary, reset,
+    analyzePage, batchAnalyzePages, cancelAnalysis, applyRedactions, refreshSummary, reset,
+    activeJobCount: Object.keys(activeJobs).length,
   };
 }
