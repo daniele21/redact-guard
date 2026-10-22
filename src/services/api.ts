@@ -11,6 +11,7 @@ import {
   HealthResponse,
   DocumentAnalysisSummary,
   LocalModelCatalog,
+  AnalysisJob,
   ScopedPolicyDetail,
 } from '../types';
 
@@ -66,6 +67,38 @@ export const api = {
     if (!res.ok) {
       throw new Error(await errorMessage(res, 'Upload failed'));
     }
+    return res.json();
+  },
+
+  startAnalysisJob: async (docId: string, pages: number[], force: boolean = false): Promise<AnalysisJob> => {
+    const base = await getBase();
+    const res = await fetch(`${base}/jobs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ document_id: docId, pages, force }),
+    });
+    if (!res.ok) throw new Error(await errorMessage(res, 'Impossibile accodare l’analisi.'));
+    return res.json();
+  },
+
+  getAnalysisJob: async (jobId: string): Promise<AnalysisJob> => {
+    const base = await getBase();
+    const res = await fetch(`${base}/jobs/${encodeURIComponent(jobId)}`, { cache: 'no-store' });
+    if (!res.ok) throw new Error(await errorMessage(res, 'Stato analisi non disponibile.'));
+    return res.json();
+  },
+
+  getJobResults: async (jobId: string): Promise<PageAnalysisResult[]> => {
+    const base = await getBase();
+    const res = await fetch(`${base}/jobs/${encodeURIComponent(jobId)}/results`, { cache: 'no-store' });
+    if (!res.ok) throw new Error(await errorMessage(res, 'Risultati analisi non disponibili.'));
+    return res.json();
+  },
+
+  cancelAnalysisJob: async (jobId: string): Promise<AnalysisJob> => {
+    const base = await getBase();
+    const res = await fetch(`${base}/jobs/${encodeURIComponent(jobId)}/cancel`, { method: 'POST' });
+    if (!res.ok) throw new Error(await errorMessage(res, 'Impossibile annullare il job.'));
     return res.json();
   },
 
