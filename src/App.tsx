@@ -14,6 +14,7 @@ type AppPhase =
   | 'ready'
   | 'korgis-offline'
   | 'model-not-resident'
+  | 'runtime-incompatible'
   | 'backend-error';
 
 function App() {
@@ -39,6 +40,8 @@ function App() {
           setPhase('ready');
         } else if (nextHealth.llm_status === 'model_not_resident') {
           setPhase('model-not-resident');
+        } else if (nextHealth.llm_status === 'runtime_incompatible') {
+          setPhase('runtime-incompatible');
         } else {
           setPhase('korgis-offline');
         }
@@ -84,12 +87,24 @@ function App() {
     );
   }
 
-  if (phase === 'korgis-offline' || phase === 'model-not-resident') {
+  if (
+    phase === 'korgis-offline' ||
+    phase === 'model-not-resident' ||
+    phase === 'runtime-incompatible'
+  ) {
+    const status =
+      phase === 'korgis-offline'
+        ? 'offline'
+        : phase === 'model-not-resident'
+          ? 'model_not_resident'
+          : 'runtime_incompatible';
     return (
       <KorgisSetupScreen
-        status={phase === 'korgis-offline' ? 'offline' : 'model_not_resident'}
+        status={status}
+        mode={health?.korgis_mode ?? 'external'}
         model={health?.model ?? 'nemotron-nano-4b'}
         protocolVersion={health?.korgis_protocol_version ?? null}
+        requestEvidenceSupported={health?.korgis_request_evidence_supported ?? false}
         onRetry={retryRuntime}
       />
     );

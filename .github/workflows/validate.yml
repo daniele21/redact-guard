@@ -20,6 +20,45 @@ jobs:
         run: python -m compileall -q anonimizer
       - name: Korgis contract tests
         run: python -m unittest discover -s anonimizer/tests -p "test_*.py"
+      - name: Managed packaging contract
+        run: python scripts/verify-managed-packaging.py
+
+  managed-korgis-contract:
+    name: Managed Korgis wheel contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read pinned Korgis runtime contract
+        id: korgis
+        shell: bash
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          from pathlib import Path
+          payload = json.loads(Path(".engineering/korgis-runtime.json").read_text())
+          print(f"repository={payload['repository']}")
+          print(f"commit={payload['commit']}")
+          print(f"request_evidence_protocol={payload['request_evidence_protocol']}")
+          PY
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ steps.korgis.outputs.repository }}
+          ref: ${{ steps.korgis.outputs.commit }}
+          path: korgis-candidate
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Build pinned Korgis wheel
+        run: |
+          python -m pip install "build==1.2.2.post1"
+          python -m build --wheel --outdir korgis-dist korgis-candidate
+      - name: Verify RedactGuard managed-runtime contract
+        run: |
+          wheel="$(find korgis-dist -maxdepth 1 -type f -name '*.whl' -print -quit)"
+          test -n "$wheel"
+          python scripts/verify-korgis-wheel.py \
+            "$wheel" \
+            --expected-commit "${{ steps.korgis.outputs.commit }}"
 
   frontend:
     runs-on: ubuntu-latest
@@ -40,9 +79,127 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
+      - name: Install Linux dependencies for Tauri
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            curl \
+            file \
+            libayatana-appindicator3-dev \
+            libssl-dev \
+            librsvg2-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev \
+            pkg-config \
+            wget
       - name: Check Rust formatting/parsing
         run: |
           cargo fmt --check --manifest-path sidecar/Cargo.toml
           cargo fmt --check --manifest-path src-tauri/Cargo.toml
-      - name: Check lightweight sidecar launcher
-        run: cargo check --manifest-path sidecar/Cargo.toml
+      - name: Test lightweight sidecar launcher
+        run: cargo test --manifest-path sidecar/Cargo.toml
+      - name: Stage sidecar binary for Tauri
+        run: |
+          cargo build --manifest-path sidecar/Cargo.toml
+          mkdir -p src-tauri/binaries
+          cp sidecar/target/debug/redactguard-server \
+            src-tauri/binaries/redactguard-server-x86_64-unknown-linux-gnu
+      - name: Check Tauri managed runtime orchestration
+        run: cargo check --manifest-path src-tauri/Cargo.toml
+      - name: Check packaging script syntax
+        run: bash -n scripts/build-sidecar.sh
+
+  managed-package-macos:
+    name: Managed macOS app bundle
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Read pinned Korgis runtime contract
+        id: korgis
+        shell: bash
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          from pathlib import Path
+          payload = json.loads(Path(".engineering/korgis-runtime.json").read_text())
+          print(f"repository={payload['repository']}")
+          print(f"commit={payload['commit']}")
+          PY
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ steps.korgis.outputs.repository }}
+          ref: ${{ steps.korgis.outputs.commit }}
+          path: korgis-candidate
+      - name: Build and verify pinned Korgis wheel
+        shell: bash
+        run: |
+          python -m pip install "build==1.2.2.post1"
+          python -m build --wheel --outdir korgis-dist korgis-candidate
+          wheel="$(find korgis-dist -maxdepth 1 -type f -name '*.whl' -print -quit)"
+          test -n "$wheel"
+          python scripts/verify-korgis-wheel.py \
+            "$wheel" \
+            --expected-commit "${{ steps.korgis.outputs.commit }}"
+          sha="$(python - "$wheel" <<'PY'
+          import hashlib
+          import sys
+          from pathlib import Path
+          print(hashlib.sha256(Path(sys.argv[1]).read_bytes()).hexdigest())
+          PY
+          )"
+          echo "KORGIS_WHEEL=$(pwd)/$wheel" >> "$GITHUB_ENV"
+          echo "KORGIS_WHEEL_SHA256=$sha" >> "$GITHUB_ENV"
+          echo "KORGIS_SOURCE_COMMIT=${{ steps.korgis.outputs.commit }}" >> "$GITHUB_ENV"
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+      - run: pnpm install --frozen-lockfile
+      - name: Build managed sidecar resources
+        shell: bash
+        env:
+          REDACTGUARD_BUILD_TARGET: aarch64-apple-darwin
+        run: pnpm tauri:build-sidecar
+      - name: Build ad-hoc signed macOS app bundle
+        env:
+          APPLE_SIGNING_IDENTITY: "-"
+        run: pnpm tauri build --bundles app --target aarch64-apple-darwin
+      - name: Verify packaged managed-runtime layout
+        shell: bash
+        run: |
+          app="src-tauri/target/aarch64-apple-darwin/release/bundle/macos/RedactGuard.app"
+          test -d "$app"
+          test -n "$(find "$app/Contents/MacOS" -maxdepth 1 -type f -name 'redactguard-server*' -print -quit)"
+          manifest="$(find "$app/Contents" -type f -path '*/korgis/manifest.json' -print -quit)"
+          test -n "$manifest"
+          python - "$manifest" "${{ steps.korgis.outputs.commit }}" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+          payload = json.loads(Path(sys.argv[1]).read_text())
+          assert payload["source_commit"] == sys.argv[2]
+          assert len(payload["wheel_sha256"]) == 64
+          PY
+      - name: Archive app bundle preserving executable permissions
+        shell: bash
+        run: |
+          app_dir="src-tauri/target/aarch64-apple-darwin/release/bundle/macos"
+          archive="redactguard-macos-arm64-pr-${{ github.event.pull_request.number }}.tar.gz"
+          tar -czf "$archive" -C "$app_dir" RedactGuard.app
+          tar -tzf "$archive" >/dev/null
+      - name: Upload representative macOS app candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: redactguard-macos-arm64-pr-${{ github.event.pull_request.number }}
+          path: redactguard-macos-arm64-pr-${{ github.event.pull_request.number }}.tar.gz
+          retention-days: 7
+          if-no-files-found: error
+

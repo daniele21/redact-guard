@@ -1,18 +1,43 @@
 import React from 'react';
 
 interface Props {
-  status: 'offline' | 'model_not_resident';
+  status: 'offline' | 'model_not_resident' | 'runtime_incompatible';
+  mode: 'external' | 'managed';
   model: string;
   protocolVersion: string | null;
+  requestEvidenceSupported: boolean;
   onRetry: () => void;
 }
 
-export function KorgisSetupScreen({ status, model, protocolVersion, onRetry }: Props) {
+export function KorgisSetupScreen({
+  status,
+  mode,
+  model,
+  protocolVersion,
+  requestEvidenceSupported,
+  onRetry,
+}: Props) {
+  const external = mode === 'external';
   const offline = status === 'offline';
+  const incompatible = status === 'runtime_incompatible';
   const commands = [
     'uv run --frozen local-llm download ' + model,
     'uv run --frozen local-llm serve --model ' + model + ' --no-download',
   ].join('\n');
+
+  const title = incompatible
+    ? 'Korgis runtime is incompatible'
+    : offline
+      ? external
+        ? 'Korgis is not running'
+        : 'Managed Korgis did not start'
+      : 'RedactGuard model is not resident';
+
+  const description = incompatible
+    ? 'Managed RedactGuard requires a Korgis build that supports the expected runtime identity and request-evidence contracts.'
+    : external
+      ? 'RedactGuard uses your separately managed Korgis instance for model lifecycle, inference and resource evidence.'
+      : 'RedactGuard manages a separate local Korgis process. Korgis remains responsible for model lifecycle, inference and resource telemetry.';
 
   return (
     <div className="min-h-screen bg-surface flex items-center justify-center p-6">
@@ -21,35 +46,54 @@ export function KorgisSetupScreen({ status, model, protocolVersion, onRetry }: P
           <span className="text-primary font-bold text-sm">AI</span>
         </div>
 
-        <h1 className="text-2xl font-bold text-on-surface mb-2">
-          {offline ? 'Korgis is not running' : 'RedactGuard model is not resident'}
-        </h1>
-        <p className="text-on-surface-variant mb-6">
-          RedactGuard no longer embeds or downloads its own LLM runtime. Korgis is the local runtime
-          authority for model download, lifecycle, backend selection and inference.
-        </p>
+        <h1 className="text-2xl font-bold text-on-surface mb-2">{title}</h1>
+        <p className="text-on-surface-variant mb-6">{description}</p>
 
         <div className="bg-surface-variant rounded-xl p-4 mb-4 border border-outline-variant">
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+            <dt className="font-semibold text-on-surface">Runtime mode</dt>
+            <dd className="font-mono text-on-surface-variant">{mode}</dd>
             <dt className="font-semibold text-on-surface">Required model</dt>
             <dd className="font-mono text-on-surface-variant">{model}</dd>
-            <dt className="font-semibold text-on-surface">Korgis endpoint</dt>
-            <dd className="font-mono text-on-surface-variant">http://127.0.0.1:1235/v1</dd>
+            {external && (
+              <>
+                <dt className="font-semibold text-on-surface">Korgis endpoint</dt>
+                <dd className="font-mono text-on-surface-variant">Configured external endpoint</dd>
+              </>
+            )}
             <dt className="font-semibold text-on-surface">Identity protocol</dt>
             <dd className="font-mono text-on-surface-variant">
-              {protocolVersion ?? 'local-llm-identity-v1'}
+              {protocolVersion ?? 'unavailable'}
+            </dd>
+            <dt className="font-semibold text-on-surface">Resource evidence</dt>
+            <dd className="font-mono text-on-surface-variant">
+              {requestEvidenceSupported ? 'korgis-request-evidence-v1' : 'unavailable'}
             </dd>
           </dl>
         </div>
 
-        <div className="bg-surface-variant/50 rounded-xl p-4 mb-6 border border-outline-variant">
-          <p className="font-semibold text-on-surface text-sm mb-3">
-            {offline ? 'Start Korgis with the configured model' : 'Make the configured model resident in Korgis'}
-          </p>
-          <pre className="text-xs text-on-surface-variant overflow-x-auto whitespace-pre-wrap font-mono">
-            {commands}
-          </pre>
-        </div>
+        {external && !incompatible && (
+          <div className="bg-surface-variant/50 rounded-xl p-4 mb-6 border border-outline-variant">
+            <p className="font-semibold text-on-surface text-sm mb-3">
+              {offline
+                ? 'Start Korgis with the configured model'
+                : 'Make the configured model resident in Korgis'}
+            </p>
+            <pre className="text-xs text-on-surface-variant overflow-x-auto whitespace-pre-wrap font-mono">
+              {commands}
+            </pre>
+          </div>
+        )}
+
+        {incompatible && (
+          <div className="bg-error/5 rounded-xl p-4 mb-6 border border-error/20">
+            <p className="text-sm text-on-surface-variant">
+              {external
+                ? 'Update the external Korgis instance, then retry the connection.'
+                : 'This packaged Korgis runtime must be replaced by a compatible RedactGuard build. The app will not silently downgrade the managed runtime contract.'}
+            </p>
+          </div>
+        )}
 
         <button
           onClick={onRetry}
@@ -59,7 +103,7 @@ export function KorgisSetupScreen({ status, model, protocolVersion, onRetry }: P
         </button>
 
         <p className="text-xs text-on-surface-variant mt-4 text-center">
-          RedactGuard sends document text only to the Korgis instance configured on your machine.
+          Document inference remains local. RedactGuard does not provide a cloud fallback.
         </p>
       </div>
     </div>
