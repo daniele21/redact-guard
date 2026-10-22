@@ -31,7 +31,11 @@ export default defineConfig(({mode}) => {
         },
       },
       hmr: process.env.DISABLE_HMR !== 'true',
-      watch: process.env.DISABLE_HMR === 'true' ? null : {},
+      // Tauri and the packaged Python runtime write thousands of generated files.
+      // Never trigger UI reloads from Rust/Python build output.
+      watch: process.env.DISABLE_HMR === 'true' ? null : {
+        ignored: ['**/src-tauri/target/**', '**/sidecar/target/**'],
+      },
     },
     envPrefix: ['VITE_', 'TAURI_'],
   };

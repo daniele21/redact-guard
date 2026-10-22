@@ -94,3 +94,26 @@ start Korgis administrative endpoints or bypass model identity / export safeguar
 exact source and packaged Korgis commits; it is not a PASS for the new native/UI
 startup code. Exact-head automated CI and a new installed GUI startup/restart/
 accessibility check are still required before integration and release readiness.
+
+## Development startup diagnostics (2026-10-22)
+
+`pnpm tauri:dev` starts Vite first. The Rust/Tauri process is then compiled
+and launched; only **after native startup** does Tauri spawn its owned Python
+FastAPI backend on 127.0.0.1:8000. During the first Rust compilation, a
+`/api/health` proxy `ECONNREFUSED` is expected and is not evidence that
+Korgis or the installed macOS bundle failed. Verify native startup and API
+health before treating it as a persistent failure.
+
+The Vite development server now binds to **127.0.0.1 only**, and excludes
+`src-tauri/target/**` and `sidecar/target/**` from HMR file watching. Both
+rules are covered by a source-owned resolved-Vite-config test in PR CI.
+Do not start `pnpm start` alongside `pnpm tauri:dev`: both routes would
+attempt to own the local FastAPI port 8000.
+
+If the API is still unavailable **after** the Tauri binary launches, inspect
+native lines `[API]` and `Failed to start backend` and verify the local
+`.venv/bin/python` installation. In default debug mode Korgis is **external**;
+an offline Korgis should be represented as model-not-ready after the document
+API starts, not as a substitute port or a reason to expose another listener.
+The managed Korgis startup belongs to the packaged app or an explicitly
+configured development mode, not to Vite.

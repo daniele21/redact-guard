@@ -83,6 +83,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
+      - run: node --test scripts/test-vite-dev-config.mjs
       - run: node --experimental-strip-types --test src/components/review/reviewGate.test.mjs
       - run: node --experimental-strip-types --test src/components/review/reviewVisits.test.mjs
       - run: node --experimental-strip-types --test src/hooks/documentQueue.test.mjs
