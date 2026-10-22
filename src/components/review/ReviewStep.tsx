@@ -17,6 +17,7 @@ interface Props {
   onAnalyzePage: (page: number, force?: boolean) => Promise<void>;
   onBatchAnalyzePages: (pages: number[], force?: boolean) => Promise<void>;
   onApplyRedactions: (decisions: Record<string, ReviewDecision>) => Promise<void>;
+  onCancelAnalysis: () => Promise<void>;
   onProceed: () => void;
   initialDraft?: ReviewDraft;
   onDraftChange?: (docId: string, draft: ReviewDraft) => void;
@@ -35,7 +36,7 @@ const maskValue = (value: string): string => {
   return value.length <= 4 ? value[0] + '•••' : value.slice(0, 2) + '••••' + value.slice(-2);
 };
 
-export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyRedactions, onProceed, initialDraft, onDraftChange }: Props) {
+export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyRedactions, onCancelAnalysis, onProceed, initialDraft, onDraftChange }: Props) {
   const [page, setPage] = useState(1);
   const [decisions, setDecisions] = useState<Record<string, ReviewDecision>>(() => initialDraft?.decisions ?? {});
   const [visitedPages, setVisitedPages] = useState<Set<number>>(() => new Set(initialDraft?.visitedPages ?? []));
@@ -202,9 +203,9 @@ export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyR
         <div className="flex min-h-0 flex-col gap-3">
           <div className="rg-context-card flex flex-wrap items-center justify-between gap-3 rounded-2xl px-4 py-3">
             <div className="flex items-center gap-3 text-sm">
-              <button type="button" aria-label="Pagina precedente" disabled={page <= 1 || state.isAnalyzing} onClick={() => changePage(page - 1)} className="rounded-lg p-2 hover:bg-surface-container-high disabled:opacity-40"><ChevronLeft size={18} /></button>
+              <button type="button" aria-label="Pagina precedente" disabled={page <= 1} onClick={() => changePage(page - 1)} className="rounded-lg p-2 hover:bg-surface-container-high disabled:opacity-40"><ChevronLeft size={18} /></button>
               <span className="min-w-20 text-center font-medium">Pagina {page} / {total}</span>
-              <button type="button" aria-label="Pagina successiva" disabled={page >= total || state.isAnalyzing} onClick={() => changePage(page + 1)} className="rounded-lg p-2 hover:bg-surface-container-high disabled:opacity-40"><ChevronRight size={18} /></button>
+              <button type="button" aria-label="Pagina successiva" disabled={page >= total} onClick={() => changePage(page + 1)} className="rounded-lg p-2 hover:bg-surface-container-high disabled:opacity-40"><ChevronRight size={18} /></button>
             </div>
             <div className="flex flex-wrap gap-2">
               <button type="button" onClick={() => void onAnalyzePage(page, Boolean(result))} disabled={state.isAnalyzing || !pageData} className="rg-secondary-button">
@@ -218,7 +219,7 @@ export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyR
 
           {state.analysisErrors[page] && <div role="alert" className="flex items-center gap-2 rounded-xl border border-error/30 bg-error/10 p-4 text-sm text-error"><AlertTriangle size={19} aria-hidden="true" /> Analisi della pagina non riuscita: {state.analysisErrors[page]}</div>}
           {!state.analysisErrors[page] && result?.warning && <div role="alert" className="flex items-center gap-2 rounded-xl border border-warning/30 bg-warning/10 p-4 text-sm text-warning"><AlertTriangle size={19} aria-hidden="true" /> {result.warning}</div>}
-          {state.isAnalyzing && <p role="status" className="rounded-xl bg-primary/5 p-3 text-sm text-primary">Analisi locale in corso {state.currentAnalyzingPage ? '· pagina ' + state.currentAnalyzingPage : ''}…</p>}
+          {state.job?.cancellable && <div role="status" className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-primary/5 p-3 text-sm text-primary"><span>Job locale {state.job.status} · {state.job.pages_completed}/{state.job.pages_total} pagine completate{state.job.current_page ? ' · pagina ' + state.job.current_page : ''}. Puoi continuare a navigare.</span><button type="button" className="rg-secondary-button" onClick={() => void onCancelAnalysis()} disabled={state.job.status === 'cancelling'}>{state.job.status === 'cancelling' ? 'Arresto dopo la pagina…' : 'Annulla analisi'}</button></div>}
 
           <div className="min-h-[260px] flex-1 overflow-y-auto rounded-2xl border border-outline-variant/70 bg-surface-container-lowest p-2 lg:min-h-[320px]">
             {pageData ? <DocumentPanel
