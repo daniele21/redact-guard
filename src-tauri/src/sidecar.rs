@@ -210,6 +210,7 @@ async fn start_korgis_server(handle: &AppHandle, port: u16, model: &str) -> Resu
                 &port_str,
                 "--model",
                 model,
+                "--no-download",
             ])
             .current_dir(&root)
     } else {
