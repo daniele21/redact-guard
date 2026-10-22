@@ -31,7 +31,8 @@ export function ModelCenter({ health, onBack, onRetry }: Props) {
     }
   }, []);
 
-  useEffect(() => { void refresh(); }, [refresh]);
+  // When Korgis finishes loading, refresh the resident catalog automatically.
+  useEffect(() => { void refresh(); }, [refresh, health?.llm_status === 'online']);
 
   const save = async () => {
     if (!candidate || !catalog || candidate === catalog.selected_model) return;
@@ -117,7 +118,7 @@ export function ModelCenter({ health, onBack, onRetry }: Props) {
       : !catalog?.discovery_available ? (
         <div role="status" className="mt-5 flex gap-3 rounded-2xl border border-warning/30 bg-warning/5 p-5">
           <ServerOff size={20} className="shrink-0 text-warning" aria-hidden="true" />
-          <div><h3 className="font-medium">Korgis non è raggiungibile</h3><p className="mt-1 text-sm leading-6 text-on-surface-variant">La scelta salvata non viene cambiata automaticamente. Avvia il runtime locale e aggiorna l'elenco.</p></div>
+          <div><h3 className="font-medium">Korgis non è raggiungibile</h3><p className="mt-1 text-sm leading-6 text-on-surface-variant">{health?.korgis_mode === 'managed' ? 'RedactGuard avvia Korgis automaticamente. Il modello potrebbe essere ancora in caricamento o aver riscontrato un errore; la scelta salvata non cambia.' : "La scelta salvata non cambia. Avvia Korgis esternamente e aggiorna l'elenco."}</p></div>
         </div>
       ) : catalog.models.length === 0 ? (
         <div role="status" className="mt-5 rounded-2xl border border-outline-variant p-6 text-sm text-on-surface-variant">Nessun modello residente. Caricane uno in Korgis e aggiorna questa schermata.</div>
