@@ -149,7 +149,7 @@ await page.route('**/api/**', async route => {
     if (jobMatch[2] === 'cancel' && method === 'POST') job.status = 'cancelled';
     if (!jobMatch[2] && method === 'GET' && job.status !== 'cancelled') {
       job.polls++;
-      if (job.polls >= 3) {
+      if (job.polls >= 4) {
         job.status = 'complete';
         job.completed = job.pages;
         job.currentPage = null;
