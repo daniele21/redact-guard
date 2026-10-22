@@ -157,7 +157,8 @@ export function useDocument() {
       if (busy || disposed) return;
       busy = true;
       try {
-        for (const [docId, jobId] of Object.entries(activeJobs)) {
+        for (const docId of Object.keys(activeJobs)) {
+          const jobId: string = activeJobs[docId];
           if (disposed) break;
           try {
             const job = await api.getAnalysisJob(jobId);
@@ -260,7 +261,7 @@ export function useDocument() {
   };
 
   const reset = useCallback(() => {
-    for (const jobId of Object.values(activeJobs)) { void api.cancelAnalysisJob(jobId).catch(() => {}); }
+    for (const docId of Object.keys(activeJobs)) { void api.cancelAnalysisJob(activeJobs[docId]).catch(() => {}); }
     setActiveJobs({});
     setById({});
     setOrder([]);
