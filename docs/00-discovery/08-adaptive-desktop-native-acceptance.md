@@ -68,3 +68,29 @@ Do not check these boxes based on the browser fixture. A human must assess visua
 The integration candidate must not be promoted as stable/release-ready while an applicable blocking real-device gate remains unresolved. Separately, signing identity, notarization, real PII benchmark quality and PDF-layout-preserving export require their own release/product evidence. Existing Markdown export is a deliberate supported scope, not a claim of layout-preserving PDF output.
 
 No cloud PII processing, analytics upload, new document retention, or external subprocessors are introduced by this acceptance protocol.
+
+## 2026-10-22 — representative model pass and desktop startup remediation
+
+The representative Apple Silicon packaged managed-runtime E2E **passed** on
+RedactGuard commit `7453d666e95a9b9bbd6d0f6c091a25b7c4847c86` and pinned Korgis
+`809511e2ba33bfb61ab195bf32ca4152b759c293`. The synthetic PDF exercised
+one actual Nemotron inference with request CPU/RAM provenance and both packaged
+processes shut down gracefully. Evidence was reviewed from the locally generated
+bounded summary. Raw process logs are not retained in the repository.
+
+The installed Tauri application independently displayed "Backend locale non disponibile".
+The source showed two distinct startup sequencing faults: Tauri exposed an initial
+hardcoded API port before binding the randomly selected release port, and the UI
+cached that first value; native startup also gated the entire API on Korgis model
+readiness, even though the PII policy library supports an offline Korgis state.
+
+The new candidate starts the document API first, exposes its dynamically selected
+port **only after API health succeeds**, retries unpublished native ports without
+falling back to the browser development proxy, refetches initial PII catalog data
+after readiness, and keeps polling Korgis while the model warms up. It does not
+start Korgis administrative endpoints or bypass model identity / export safeguards.
+
+**Evidence boundary:** the earlier real-model PASS applies only to the recorded
+exact source and packaged Korgis commits; it is not a PASS for the new native/UI
+startup code. Exact-head automated CI and a new installed GUI startup/restart/
+accessibility check are still required before integration and release readiness.
