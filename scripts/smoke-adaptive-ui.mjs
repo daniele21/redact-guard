@@ -240,7 +240,7 @@ try {
   await page.getByRole('heading', { name: 'Il modello giusto, una sola volta.' }).waitFor();
   await page.getByText('test-model-b', { exact: true }).first().click();
   await page.getByRole('button', { name: 'Usa questo modello' }).click();
-  await page.getByText(/Scelta salvata/).waitFor();
+  await page.getByText(/Modello selezionato|Scelta salvata/).waitFor();
   await page.locator('details').first().click();
   await snap('02-model-center');
   assert.equal(selected, 'test-model-b');
