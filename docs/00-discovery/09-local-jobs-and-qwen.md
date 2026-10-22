@@ -75,3 +75,24 @@ Korgis loopback-origin hardening is separately tracked in
 [Korgis #229](https://github.com/daniele21/korgis/issues/229).
 The Qwen catalog changes are a public Korgis contract (STRONG);
 Mac packaging and desktop acceptance remain REAL_ENVIRONMENT / release gates.
+
+## Korgis lifecycle and catalog diagnostics (2026-10-22)
+
+Tauri development starts RedactGuard's FastAPI backend but **defaults to
+external** Korgis; the packaged desktop defaults to **managed** Korgis with a
+pinned, separately bundled runtime. No implicit Korgis installation or model
+download takes place in development.
+
+The model API now distinguishes `discovery_available` (resident `/v1/models`)
+from `catalog_available` (registered-model `/v1/runtime/catalog`). A legacy
+runtime can expose identity and resident discovery but no registered catalog;
+its missing endpoint must never be represented as an empty collection of
+installed models. With the pinned Korgis catalog, RedactGuard shows Qwen and
+other compatible text choices including not-yet-downloaded ones; it does not
+activate/download them silently or use unauthenticated admin endpoints.
+
+A saved nonresident choice is loaded on restart **only in managed mode**;
+external runtime activation belongs to the operator of that Korgis process.
+Mac installed-app acceptance must verify the pinned model catalog, actual
+residency/inference and owned process cleanup. Synthetic browser coverage does
+not prove that the user's currently connected external Korgis has the pin.

@@ -32,6 +32,7 @@ class ResidentModelCatalog(BaseModel):
     choices: list[ModelChoice] = Field(default_factory=list)
     selected_resident: bool
     discovery_available: bool
+    catalog_available: bool = False
     hardware: dict[str, str | int] | None = None
 
 
@@ -45,8 +46,11 @@ def _catalog(selected: str) -> ResidentModelCatalog:
         )
     try:
         choices = list_catalog_models()
+        catalog_available = True
     except ModelCatalogUnavailable:
+        # A legacy Korgis may provide /v1/models but no registry catalog.
         choices = []
+        catalog_available = False
     # The legacy first-launch preference may be a Korgis startup key rather
     # than its public OpenAI-compatible ID. Resolve it for UI display only.
     choice = next(
@@ -58,7 +62,7 @@ def _catalog(selected: str) -> ResidentModelCatalog:
     return ResidentModelCatalog(
         selected_model=visible_selected, models=models, choices=choices,
         selected_resident=resident,
-        discovery_available=True,
+        discovery_available=True, catalog_available=catalog_available,
         hardware=get_public_hardware(visible_selected) if resident else None,
     )
 

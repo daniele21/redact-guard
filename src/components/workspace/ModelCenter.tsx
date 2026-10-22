@@ -46,7 +46,7 @@ export function ModelCenter({ health, onBack, onRetry }: Props) {
       const next = await api.selectLocalModel(candidate);
       setCatalog(next);
       setCandidate(next.selected_model);
-      setNotice(next.selected_resident ? 'Modello selezionato e già residente.' : 'Scelta salvata. Chiudi e riapri RedactGuard per caricare il modello scelto; nessun fallback automatico.');
+      setNotice(next.selected_resident ? 'Modello selezionato e già residente.' : health?.korgis_mode === 'managed' ? 'Scelta salvata. Riavvia RedactGuard per caricare il modello con Korgis gestito.' : 'Scelta salvata. In modalità esterna, carica il modello in Korgis e aggiorna l’elenco.');
       onRetry();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Impossibile salvare il modello locale.');
@@ -64,7 +64,7 @@ export function ModelCenter({ health, onBack, onRetry }: Props) {
       <div className="mb-5 flex items-center gap-3 text-primary"><Cpu size={22} aria-hidden="true" /> <span className="text-sm">AI locale · Korgis</span></div>
       <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Il modello giusto, una sola volta.</h1>
       <p className="mt-4 max-w-2xl text-sm leading-7 text-on-surface-variant">
-        Scegli tra i modelli locali registrati in Korgis. Quelli scaricati ma non ancora residenti saranno caricati al prossimo avvio dell’app, senza sostituire il modello in uso durante le analisi.
+        Scegli tra i modelli di testo registrati in Korgis, anche non ancora scaricati o residenti. I modelli non scaricati non sono selezionabili; l’attivazione dipende dalla modalità del runtime.
       </p>
 
       <section className="rg-context-card mt-8 rounded-3xl p-6 md:p-8" aria-label="Modello configurato">
@@ -75,7 +75,7 @@ export function ModelCenter({ health, onBack, onRetry }: Props) {
           </div>
           <span className={'rounded-full border px-3 py-1.5 text-xs ' +
             (catalog?.selected_resident ? 'border-success/40 text-success' : 'border-warning/40 text-warning')}>
-            {catalog?.selected_resident ? 'Residente in Korgis' : 'Non residente · riavvio necessario'}
+            {catalog?.selected_resident ? 'Residente in Korgis' : health?.korgis_mode === 'managed' ? 'Non residente · riavvio necessario' : 'Non residente nel Korgis esterno'}
           </span>
         </div>
         <div className="mt-5 flex flex-wrap items-center gap-5 text-xs text-on-surface-variant">
@@ -109,8 +109,8 @@ export function ModelCenter({ health, onBack, onRetry }: Props) {
 
       <div className="mt-8 flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-semibold">Modelli disponibili ora</h2>
-          <p className="mt-1 text-sm text-on-surface-variant">Korgis determina quali modelli sono effettivamente residenti.</p>
+          <h2 className="text-xl font-semibold">Catalogo modelli Korgis</h2>
+          <p className="mt-1 text-sm text-on-surface-variant">Registrati, scaricati e residenti sono stati diversi. La lista proviene dal runtime collegato.</p>
         </div>
         <button type="button" onClick={() => { void refresh(); onRetry(); }} disabled={loading || saving} className="rg-secondary-button flex items-center gap-2">
           <RefreshCw size={16} aria-hidden="true" /> Aggiorna elenco
@@ -123,10 +123,17 @@ export function ModelCenter({ health, onBack, onRetry }: Props) {
           <ServerOff size={20} className="shrink-0 text-warning" aria-hidden="true" />
           <div><h3 className="font-medium">Korgis non è raggiungibile</h3><p className="mt-1 text-sm leading-6 text-on-surface-variant">{health?.korgis_mode === 'managed' ? 'RedactGuard avvia Korgis automaticamente. Il modello potrebbe essere ancora in caricamento o aver riscontrato un errore; la scelta salvata non cambia.' : "La scelta salvata non cambia. Avvia Korgis esternamente e aggiorna l'elenco."}</p></div>
         </div>
+      ) : !catalog.catalog_available && choices.length === 0 ? (
+        <div role="status" className="mt-5 flex gap-3 rounded-2xl border border-warning/30 bg-warning/5 p-5">
+          <ServerOff size={20} className="shrink-0 text-warning" aria-hidden="true" />
+          <div><h3 className="font-medium">Catalogo Korgis non disponibile</h3><p className="mt-1 text-sm leading-6 text-on-surface-variant">Il runtime risponde, ma non espone il catalogo dei modelli registrati. {health?.korgis_mode === 'external' ? 'In sviluppo RedactGuard si collega a Korgis esterno: potrebbe essere una versione precedente. ' : 'Verifica il Korgis gestito dalla build. '}Non significa che non esistano modelli scaricati.</p></div>
+        </div>
       ) : choices.length === 0 ? (
-        <div role="status" className="mt-5 rounded-2xl border border-outline-variant p-6 text-sm text-on-surface-variant">Nessun modello residente. Caricane uno in Korgis e aggiorna questa schermata.</div>
+        <div role="status" className="mt-5 rounded-2xl border border-outline-variant p-6 text-sm text-on-surface-variant">Il catalogo collegato non contiene modelli di testo compatibili. Verifica il registry Korgis.</div>
       ) : (
-        <div className="mt-5 space-y-2" role="radiogroup" aria-label="Seleziona modello locale per i prossimi documenti">
+        <div className="mt-5 space-y-2">
+          {!catalog.catalog_available && <p role="status" className="rounded-2xl border border-warning/30 bg-warning/5 p-4 text-sm text-on-surface-variant">Catalogo dei modelli registrati non disponibile: vengono mostrati soltanto i modelli residenti rilevabili dal runtime legacy.</p>}
+          <div className="space-y-2" role="radiogroup" aria-label="Seleziona modello locale per i prossimi documenti">
           {choices.map(choice => (
             <label key={choice.startup_key} className={'flex items-center gap-4 rounded-2xl border p-4 transition-colors ' +
               (choice.downloaded ? 'cursor-pointer ' : 'opacity-60 ') +
@@ -139,12 +146,13 @@ export function ModelCenter({ health, onBack, onRetry }: Props) {
               {catalog.selected_model === choice.model_id && <span className="flex items-center gap-1 text-xs text-success"><CheckCircle2 size={15} aria-hidden="true" /> Salvato</span>}
             </label>
           ))}
+          </div>
         </div>
       )}
 
       {catalog?.discovery_available && choices.length > 0 && (
         <div className="mt-5 flex flex-wrap items-center justify-between gap-4">
-          <p className="max-w-lg text-xs leading-5 text-on-surface-variant">La selezione non modifica i job già avviati. Un modello scaricato ma non residente richiede il riavvio dell’app. Non vengono scaricati modelli automaticamente.</p>
+          <p className="max-w-lg text-xs leading-5 text-on-surface-variant">La selezione non modifica i job già avviati. Per caricare un modello non residente, riavvia l’app in modalità gestita oppure caricalo in Korgis esterno. Nessun download automatico.</p>
           <button type="button" className="rg-primary-button" onClick={() => { void save(); }}
             disabled={saving || loading || !canSelect}>
             {saving ? 'Salvataggio…' : 'Usa questo modello'}

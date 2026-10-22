@@ -97,14 +97,14 @@ await page.route('**/api/**', async route => {
       { model_id: 'Qwen/Qwen3.5-4B', startup_key: 'qwen3.5-4b-q4km', downloaded: true, resident: false },
       { model_id: 'Qwen/Qwen3.5-9B', startup_key: 'qwen3.5-9b-q4km', downloaded: false, resident: false },
     ],
-    selected_resident: true, discovery_available: true,
+    selected_resident: true, discovery_available: true, catalog_available: true,
     hardware: { system: 'darwin', machine: 'arm64', logical_cpus: 10, total_memory_bytes: 17179869184 },
   });
   if (path === '/local-models/selection' && method === 'PUT') {
     selected = JSON.parse(route.request().postData() || '{}').model;
     return response(route, {
       selected_model: selected, models: ['test-model-a','test-model-b'],
-      selected_resident: true, discovery_available: true,
+      selected_resident: true, discovery_available: true, catalog_available: true,
     });
   }
   if (path === '/upload' && method === 'POST') {

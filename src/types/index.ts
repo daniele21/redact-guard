@@ -230,6 +230,7 @@ export interface LocalModelCatalog {
   choices: ModelChoice[];
   selected_resident: boolean;
   discovery_available: boolean;
+  catalog_available: boolean;
   hardware?: {
     system?: string;
     machine?: string;

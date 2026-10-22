@@ -94,6 +94,32 @@ class LocalModelPreferenceTests(unittest.TestCase):
         self.assertEqual(catalog.models, [])
         self.assertFalse(catalog.selected_resident)
 
+    def test_unavailable_registry_is_not_misreported_as_empty(self):
+        from api import routes_models
+        with (patch("api.routes_models.list_resident_models", return_value=[]),
+              patch("api.routes_models.list_catalog_models",
+                    side_effect=model_selection.ModelCatalogUnavailable("legacy"))):
+            response = routes_models.get_local_models()
+        self.assertTrue(response.discovery_available)
+        self.assertFalse(response.catalog_available)
+        self.assertEqual(response.choices, [])
+
+    def test_registered_qwen_display_does_not_require_model_residency(self):
+        from api import routes_models
+        choices = [
+            {"model_id": "Qwen/Qwen3.5-4B", "startup_key": "qwen3.5-4b-q4km",
+             "downloaded": True, "resident": False},
+            {"model_id": "Qwen/Qwen3.5-9B", "startup_key": "qwen3.5-9b-q4km",
+             "downloaded": False, "resident": False},
+        ]
+        with (patch("api.routes_models.list_resident_models", return_value=[]),
+              patch("api.routes_models.list_catalog_models", return_value=choices)):
+            response = routes_models.get_local_models()
+        self.assertTrue(response.discovery_available)
+        self.assertTrue(response.catalog_available)
+        self.assertEqual([item.model_id for item in response.choices],
+                         ["Qwen/Qwen3.5-4B", "Qwen/Qwen3.5-9B"])
+
     def test_health_uses_saved_model_and_does_not_substitute(self):
         from api import routes_health
         with (patch.object(model_selection, "list_resident_models", return_value=["test-a", "test-b"]),
