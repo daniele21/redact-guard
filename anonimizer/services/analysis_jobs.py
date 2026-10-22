@@ -126,6 +126,11 @@ class AnalysisJobs:
         with self._lock:
             return [job.public() for job in self._jobs.values()]
 
+    def active_document_ids(self) -> set[str]:
+        """Keep queued and running sessions alive until terminal status."""
+        with self._lock:
+            return {job.document_id for job in self._jobs.values() if job.status not in _TERMINAL}
+
     def results(self, job_id: str) -> list[PageAnalysisResult]:
         with self._lock:
             job = self._jobs.get(job_id)
