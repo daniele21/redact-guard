@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowLeft, BookOpen, Cpu, FileText, LockKeyhole, Settings2, Shield, ShieldCheck } from 'lucide-react';
 import { useDocument } from './hooks/useDocument';
 import { useProfiles } from './hooks/useProfiles';
@@ -23,7 +23,8 @@ const initialProfile = (): string => {
 export default function App() {
   const { state, documents, activeId, selectDocument, uploadFiles, importingFile, isImporting, importErrors,
     analyzePage, batchAnalyzePages, applyRedactions, reset } = useDocument();
-  const { profiles } = useProfiles();
+  const { profiles, refresh: refreshProfiles } = useProfiles();
+  const profilesRefreshedAfterStartup = useRef(false);
   const [screen, setScreen] = useState<Screen>('home');
   const [activeProfile, setActiveProfile] = useState(initialProfile);
   const [health, setHealth] = useState<HealthResponse | null>(null);
@@ -41,15 +42,28 @@ export default function App() {
         if (cancelled) return;
         setHealth(next);
         setRuntime(next.llm_status === 'online' ? 'ready' : 'offline');
+        // The first profile request may have preceded native API readiness.
+        if (!profilesRefreshedAfterStartup.current) {
+          profilesRefreshedAfterStartup.current = true;
+          void refreshProfiles();
+        }
+        // Keep tracking model readiness after the independently started API responds.
+        if (next.llm_status !== 'online') {
+          retryTimer = setTimeout(() => void check(0), 2500);
+        }
       } catch {
         if (cancelled) return;
         if (attempt < 20) retryTimer = setTimeout(() => void check(attempt + 1), 1000);
-        else setRuntime('error');
+        else {
+          setRuntime('error');
+          // Transient native failures should recover without restarting the app.
+          retryTimer = setTimeout(() => void check(0), 5000);
+        }
       }
     };
     void check(0);
     return () => { cancelled = true; if (retryTimer) clearTimeout(retryTimer); };
-  }, [healthRequest]);
+  }, [healthRequest, refreshProfiles]);
 
   const refreshRuntime = useCallback(() => {
     setRuntime('starting');
@@ -95,7 +109,7 @@ export default function App() {
     return <div className="flex min-h-screen flex-col items-center justify-center gap-5 bg-surface px-6 text-center">
       <Shield size={38} className="text-warning" aria-hidden="true" />
       <h1 className="text-2xl font-semibold">Backend locale non disponibile</h1>
-      <p className="max-w-md text-sm leading-6 text-on-surface-variant">Impossibile collegarsi al processo locale di RedactGuard. Nessun documento è stato caricato.</p>
+      <p className="max-w-md text-sm leading-6 text-on-surface-variant">Il backend non risponde. RedactGuard riprova automaticamente; non è necessario avviare Korgis manualmente. Nessun documento è stato caricato.</p>
       <button type="button" className="rg-primary-button" onClick={refreshRuntime}>Riprova</button>
     </div>;
   }
