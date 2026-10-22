@@ -113,6 +113,38 @@ class LocalModelPreferenceTests(unittest.TestCase):
         self.assertEqual(health.model, "test-b")
         self.assertEqual(health.llm_status, "model_not_resident")
 
+    def test_downloaded_qwen_can_be_selected_for_next_start_without_residency(self):
+        choices = [
+            {"model_id": "Qwen/Qwen3.5-4B", "startup_key": "qwen3.5-4b-q4km",
+             "downloaded": True, "resident": False},
+            {"model_id": "Qwen/Qwen3.5-9B", "startup_key": "qwen3.5-9b-q4km",
+             "downloaded": False, "resident": False},
+        ]
+        with (patch.object(model_selection, "list_catalog_models", return_value=choices),
+              patch.object(model_selection, "list_resident_models", return_value=["nvidia/model"])):
+            self.assertEqual(
+                model_selection.select_available_model("Qwen/Qwen3.5-4B"),
+                "Qwen/Qwen3.5-4B",
+            )
+            self.assertEqual(json.loads(self.path.read_text())["startup_key"], "qwen3.5-4b-q4km")
+            with self.assertRaises(model_selection.ModelPreferenceError):
+                model_selection.select_available_model("Qwen/Qwen3.5-9B")
+        self.assertEqual(model_selection.get_selected_model(), "Qwen/Qwen3.5-4B")
+
+    def test_path_free_catalog_validation_rejects_malformed_entries(self):
+        payload = {"protocol_version": "local-llm-catalog-v1", "models": [
+            {"startup_key": "qwen3.5-4b-q4km", "model_id": "Qwen/Qwen3.5-4B",
+             "downloaded": True, "resident": False, "path": "/private/model"},
+            {"startup_key": "../bad", "model_id": "bad", "downloaded": True,
+             "resident": True},
+        ]}
+        with patch("services.model_selection.urllib.request.urlopen", return_value=_Response(payload)):
+            catalog = model_selection.list_catalog_models()
+        self.assertEqual(catalog, [{
+            "startup_key": "qwen3.5-4b-q4km", "model_id": "Qwen/Qwen3.5-4B",
+            "downloaded": True, "resident": False,
+        }])
+
     def test_public_model_id_maps_to_distinct_korgis_registry_key(self):
         payload = {
             "protocol_version": "local-llm-identity-v1",
