@@ -134,45 +134,29 @@ pub async fn start_backend(handle: &AppHandle) -> Result<(), String> {
         KorgisMode::External => configured,
     };
 
-    let korgis_base_url = match mode {
-        KorgisMode::External => {
-            env::var("KORGIS_BASE_URL").unwrap_or_else(|_| "http://127.0.0.1:1235/v1".to_string())
-        }
+    // The document API is independent of model residency. Allocate the Korgis
+    // endpoint first, but launch the API before loading the model.
+    let (korgis_base_url, managed_korgis_port) = match mode {
+        KorgisMode::External => (
+            env::var("KORGIS_BASE_URL")
+                .unwrap_or_else(|_| "http://127.0.0.1:1235/v1".to_string()),
+            None,
+        ),
         KorgisMode::Managed => {
             let port = portpicker::pick_unused_port().ok_or_else(|| {
                 "Could not allocate a loopback port for managed Korgis".to_string()
             })?;
-            {
-                let state = handle.state::<SidecarState>();
-                *state.korgis_port.lock().unwrap() = Some(port);
-            }
-
-            log::info!(
-                "Starting managed Korgis on port {} with model {}",
-                port,
-                model
-            );
-            start_korgis_server(handle, port, &model).await?;
-            let root_url = format!("http://127.0.0.1:{port}");
-            wait_for_http_health(
-                &format!("{root_url}/health"),
-                managed_korgis_startup_timeout(),
-                "Korgis",
-            )
-            .await?;
-            log::info!("Managed Korgis is ready on port {}", port);
-            format!("{root_url}/v1")
+            (format!("http://127.0.0.1:{port}/v1"), Some(port))
         }
     };
 
     let api_port = if cfg!(debug_assertions) {
         8000u16
     } else {
-        portpicker::pick_unused_port().unwrap_or(8000)
+        portpicker::pick_unused_port().ok_or_else(|| {
+            "Could not allocate a loopback port for the RedactGuard API".to_string()
+        })?
     };
-
-    let state = handle.state::<SidecarState>();
-    *state.api_port.lock().unwrap() = api_port;
 
     log::info!("Starting RedactGuard API server on port {}", api_port);
     start_api_server(handle, api_port, mode, &korgis_base_url, &model).await?;
@@ -182,7 +166,23 @@ pub async fn start_backend(handle: &AppHandle) -> Result<(), String> {
         "RedactGuard backend",
     )
     .await?;
+    // Never publish a guessed/placeholder port. Frontend lookup retries until
+    // the API is truly reachable at this exact endpoint.
+    *handle.state::<SidecarState>().api_port.lock().unwrap() = Some(api_port);
     log::info!("RedactGuard backend is ready on port {}", api_port);
+
+    if let Some(port) = managed_korgis_port {
+        *handle.state::<SidecarState>().korgis_port.lock().unwrap() = Some(port);
+        log::info!("Starting managed Korgis on port {} with model {}", port, model);
+        start_korgis_server(handle, port, &model).await?;
+        wait_for_http_health(
+            &format!("http://127.0.0.1:{port}/health"),
+            managed_korgis_startup_timeout(),
+            "Korgis",
+        )
+        .await?;
+        log::info!("Managed Korgis is ready on port {}", port);
+    }
 
     Ok(())
 }
