@@ -113,6 +113,85 @@ def _resident_startup_key(model: str) -> str:
     return matched[0]
 
 
+
+def list_catalog_models() -> list[dict[str, object]]:
+    """Use Korgis' path-free, read-only installed-model contract.
+
+    Downloaded does not mean resident. No admin endpoint or implicit downloads.
+    Older Korgis versions simply have no non-resident catalogue.
+    """
+    try:
+        with urllib.request.urlopen(
+            urllib.request.Request(
+                f"{config.korgis_base_url}/runtime/catalog", method="GET"
+            ), timeout=3,
+        ) as response:
+            payload = json.load(response)
+    except (OSError, ValueError, urllib.error.URLError) as exc:
+        raise ModelCatalogUnavailable("Korgis local catalog is unavailable.") from exc
+    if not isinstance(payload, dict) or payload.get("protocol_version") != "local-llm-catalog-v1":
+        raise ModelCatalogUnavailable("Korgis model catalog protocol mismatch.")
+    items = payload.get("models")
+    if not isinstance(items, list):
+        raise ModelCatalogUnavailable("Korgis model catalog shape mismatch.")
+    result = []
+    seen = set()
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        key, model = item.get("startup_key"), item.get("model_id")
+        if not isinstance(key, str) or not _MODEL_RE.fullmatch(key):
+            continue
+        if not isinstance(model, str) or not _MODEL_RE.fullmatch(model):
+            continue
+        if model in seen:
+            continue
+        if type(item.get("downloaded")) is not bool or type(item.get("resident")) is not bool:
+            continue
+        seen.add(model)
+        result.append({
+            "model_id": model, "startup_key": key,
+            "downloaded": item["downloaded"], "resident": item["resident"],
+        })
+    return result
+
+
+def select_available_model(model: str) -> str:
+    """Persist an explicitly downloaded (or resident) Korgis text model.
+
+    Nonresident selection becomes active only after restarting managed Korgis;
+    no live unload, silent replacement or unprotected administrative API.
+    """
+    model = _validate(model)
+    with _LOCK:
+        startup_key = None
+        try:
+            for entry in list_catalog_models():
+                if entry["model_id"] == model and entry["downloaded"]:
+                    startup_key = entry["startup_key"]
+                    break
+        except ModelCatalogUnavailable:
+            pass
+        if startup_key is None:
+            if model not in list_resident_models():
+                raise ModelPreferenceError("Model not installed/resident in Korgis.")
+            startup_key = _resident_startup_key(model)
+        try:
+            _PREFERENCE_PATH.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            fd, path = tempfile.mkstemp(prefix=".model-selection-", dir=_PREFERENCE_PATH.parent)
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as stream:
+                    json.dump({"version": 1, "model": model, "startup_key": startup_key}, stream)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                os.replace(path, _PREFERENCE_PATH)
+            finally:
+                if os.path.exists(path):
+                    os.unlink(path)
+        except OSError as exc:
+            raise ModelPreferenceError("Cannot save the local model preference.") from exc
+    return model
+
 def select_resident_model(model: str) -> str:
     """Persist an explicitly selected resident model; no silent load/fallback."""
     model = _validate(model)
