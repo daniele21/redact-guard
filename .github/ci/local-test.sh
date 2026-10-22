@@ -33,7 +33,8 @@ cargo fmt --check --manifest-path src-tauri/Cargo.toml
 node --experimental-strip-types --test \
   src/components/review/reviewGate.test.mjs \
   src/components/review/reviewVisits.test.mjs \
-  src/hooks/documentQueue.test.mjs
+  src/hooks/documentQueue.test.mjs \
+  src/services/backendAddress.test.mjs
 
 # Install only lightweight backend test dependencies in a disposable venv.
 # Do not mutate user/runner Python, create persistent caches or print PII.
