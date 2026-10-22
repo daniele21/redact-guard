@@ -87,6 +87,35 @@ class JobTests(unittest.TestCase):
             wait_until(lambda: self.manager.get(job["job_id"])["status"] == "cancelled")
             self.assertEqual(self.manager.get(job["job_id"])["completed_pages"], [1])
 
+    def test_two_documents_serialize_and_queued_cancel_does_not_interrupt_active(self):
+        second_doc = f"{self.doc_id}-second"
+        save_session(session(second_doc))
+        self.addCleanup(delete_session, second_doc)
+        entered, release = Event(), Event()
+        called = []
+
+        def analyze(doc_id, page, force=False):
+            called.append((doc_id, page))
+            if doc_id == self.doc_id:
+                entered.set()
+                release.wait(2)
+            return PageAnalysisResult(
+                page_number=page, has_pii=False, pii_fields=[],
+                redacted_text="synthetic", cache_hit=False,
+            )
+
+        with patch("services.analysis_jobs.analyze_page", side_effect=analyze):
+            first = self.manager.submit(self.doc_id, [1])
+            self.assertTrue(entered.wait(2))
+            second = self.manager.submit(second_doc, [1])
+            self.assertEqual(self.manager.get(second["job_id"])["status"], "queued")
+            self.manager.cancel(second["job_id"])
+            release.set()
+            wait_until(lambda: self.manager.get(first["job_id"])["status"] == "complete")
+            wait_until(lambda: self.manager.get(second["job_id"])["status"] == "cancelled")
+            self.assertEqual(called, [(self.doc_id, 1)])
+            self.assertEqual(self.manager.results(second["job_id"]), [])
+
     def test_invalid_pages_never_enter_queue(self):
         for pages in ([], [1, 1], [3]):
             with self.assertRaises(HTTPException) as caught:
