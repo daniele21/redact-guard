@@ -26,6 +26,8 @@ const baseline = {
 };
 let variant = null;
 const documents = new Map();
+const jobs = new Map();
+let lastJob = 0;
 const response = (route, data, status = 200) => route.fulfill({
   status, contentType: 'application/json', body: JSON.stringify(data),
 });
@@ -89,6 +91,12 @@ await page.route('**/api/**', async route => {
   }
   if (path === '/local-models' && method === 'GET') return response(route, {
     selected_model: selected, models: ['test-model-a','test-model-b'],
+    choices: [
+      { model_id: 'test-model-a', startup_key: 'test-model-a', downloaded: true, resident: true },
+      { model_id: 'test-model-b', startup_key: 'test-model-b', downloaded: true, resident: true },
+      { model_id: 'Qwen/Qwen3.5-4B', startup_key: 'qwen3.5-4b-q4km', downloaded: true, resident: false },
+      { model_id: 'Qwen/Qwen3.5-9B', startup_key: 'qwen3.5-9b-q4km', downloaded: false, resident: false },
+    ],
     selected_resident: true, discovery_available: true,
     hardware: { system: 'darwin', machine: 'arm64', logical_cpus: 10, total_memory_bytes: 17179869184 },
   });
@@ -117,6 +125,55 @@ await page.route('**/api/**', async route => {
       pages: Array.from({ length: pageCount }, (_, i) => ({
         page_number: i + 1, char_count: 23, text: 'Contratto: Mario Rossi.',
       })),
+    });
+  }
+  if (path === '/jobs' && method === 'POST') {
+    const input = JSON.parse(route.request().postData() || '{}');
+    const doc = documents.get(input.document_id);
+    if (!doc) return response(route, { detail: 'Missing document' }, 404);
+    const id = 'job-' + ++lastJob;
+    jobs.set(id, {
+      id, docId: input.document_id, pages: input.pages, force: Boolean(input.force),
+      status: 'queued', polls: 0, currentPage: null, completed: [],
+    });
+    return response(route, {
+      job_id: id, document_id: input.document_id, status: 'queued',
+      pages_total: input.pages.length, pages_completed: 0, completed_pages: [],
+      current_page: null, page_errors: {}, cancellable: true,
+    }, 202);
+  }
+  const jobMatch = path.match(/^\/jobs\/([^/]+)(?:\/(results|cancel))?$/);
+  if (jobMatch) {
+    const job = jobs.get(jobMatch[1]);
+    if (!job) return response(route, { detail: 'Unknown job' }, 404);
+    if (jobMatch[2] === 'cancel' && method === 'POST') job.status = 'cancelled';
+    if (!jobMatch[2] && method === 'GET' && job.status !== 'cancelled') {
+      job.polls++;
+      if (job.polls >= 3) {
+        job.status = 'complete';
+        job.completed = job.pages;
+        job.currentPage = null;
+        const doc = documents.get(job.docId);
+        for (const n of job.pages) doc.analyzedPages.add(n);
+      } else {
+        job.status = 'running';
+        job.currentPage = job.pages[0];
+      }
+    }
+    if (jobMatch[2] === 'results') {
+      const doc = documents.get(job.docId);
+      return response(route, job.completed.map(n => ({
+        page_number: n, has_pii: true,
+        pii_fields: [{ ...doc.field, finding_id: doc.field.finding_id + '-' + n }],
+        redacted_text: 'Contratto: [REDACTED_PRIVATE_PERSON].', cache_hit: false,
+        warning: null,
+      })));
+    }
+    return response(route, {
+      job_id: job.id, document_id: job.docId, status: job.status,
+      pages_total: job.pages.length, pages_completed: job.completed.length,
+      completed_pages: job.completed, current_page: job.currentPage,
+      page_errors: {}, cancellable: ['queued','running','cancelling'].includes(job.status),
     });
   }
   const match = path.match(/^\/analyze\/([^/]+)(?:\/(.*))?$/);
@@ -212,6 +269,12 @@ try {
   assert.equal(await page.getByRole('button', { name: /Conferma ed esporta/ }).isDisabled(), true);
 
   await page.getByRole('button', { name: 'Analizza tutte' }).click();
+  await page.getByText(/analisi in coda o in corso nel backend locale/i).waitFor();
+  await page.getByRole('navigation', { name: 'Spazi di lavoro' }).getByRole('button', { name: 'Libreria PII' }).click();
+  await page.getByRole('heading', { name: 'Libreria PII' }).waitFor();
+  assert.equal([...jobs.values()][0].status !== 'complete', true);
+  await page.getByRole('button', { name: 'Apri documenti' }).click();
+  await page.getByRole('heading', { name: 'Revisione del documento' }).waitFor();
   await page.getByText('1 entità rilevate').waitFor();
   await page.getByText('2/2 pagine analizzate').waitFor();
   // Opening page 1 before analysis of page 2 must be remembered.
