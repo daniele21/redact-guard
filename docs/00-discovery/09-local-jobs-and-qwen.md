@@ -44,7 +44,8 @@ path-free installed/resident text-model states. RedactGuard's Model Center can
 show both downloaded and missing registered choices without enabling the
 unauthenticated Korgis administrative API. Selection is permitted only for a
 Korgis-confirmed downloaded model. The preferred public model ID and exact
-startup registry key are persisted atomically. A nonresident selection does
+startup registry key are persisted atomically. Duplicate public model IDs mapped
+to multiple registry startup keys are excluded rather than arbitrarily selected. A nonresident selection does
 **not** hot-swap or unload a live model: user must restart RedactGuard; jobs
 already started keep their immutable per-document model and PII policy.
 

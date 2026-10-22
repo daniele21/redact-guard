@@ -41,7 +41,7 @@ RedactGuard does **not** implement its own model server or downloader. The macOS
 - Readiness/evidence: `GET /v1/models` and `GET /v1/runtime/identity`.
 - Default RedactGuard model key: `nemotron-nano-4b`.
 
-Current candidate pin: `daniele21/korgis@809511e2ba33bfb61ab195bf32ca4152b759c293`, maintained canonically in `.engineering/korgis-runtime.json`. This is an integration candidate, not a released baseline.
+Current candidate pin: `daniele21/korgis@19fa051eaf8c9d7a1e9389b4f0e8fbf6d37c9822`, maintained canonically in `.engineering/korgis-runtime.json`. This is an integration candidate, not a released baseline.
 
 ## Success Criteria
 

@@ -135,7 +135,7 @@ def list_catalog_models() -> list[dict[str, object]]:
     if not isinstance(items, list):
         raise ModelCatalogUnavailable("Korgis model catalog shape mismatch.")
     result = []
-    seen = set()
+    model_counts: dict[str, int] = {}
     for item in items:
         if not isinstance(item, dict):
             continue
@@ -144,16 +144,17 @@ def list_catalog_models() -> list[dict[str, object]]:
             continue
         if not isinstance(model, str) or not _MODEL_RE.fullmatch(model):
             continue
-        if model in seen:
-            continue
         if type(item.get("downloaded")) is not bool or type(item.get("resident")) is not bool:
             continue
-        seen.add(model)
+        model_counts[model] = model_counts.get(model, 0) + 1
         result.append({
             "model_id": model, "startup_key": key,
             "downloaded": item["downloaded"], "resident": item["resident"],
         })
-    return result
+    # Public model IDs do not uniquely name a registry artifact. Never select
+    # an arbitrary quantization when more than one startup key shares an ID.
+    # A verified resident model can still be selected through identity mapping.
+    return [choice for choice in result if model_counts[str(choice["model_id"])] == 1]
 
 
 def select_available_model(model: str) -> str:

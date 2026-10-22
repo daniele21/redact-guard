@@ -1,6 +1,6 @@
 {
   "repository": "daniele21/korgis",
-  "commit": "c41fc33e55eb7b9f7163f5060cb71733c06095fc",
+  "commit": "19fa051eaf8c9d7a1e9389b4f0e8fbf6d37c9822",
   "identity_protocol": "local-llm-identity-v1",
   "request_evidence_protocol": "korgis-request-evidence-v1",
   "packaging_mode": "separate-wheel-venv"
