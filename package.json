@@ -16,7 +16,8 @@
     "lint": "tsc --noEmit",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
-    "tauri:build-sidecar": "bash scripts/build-sidecar.sh"
+    "tauri:build-sidecar": "bash scripts/build-sidecar.sh",
+    "macos:build-local": "bash scripts/build-signed-macos.sh"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",

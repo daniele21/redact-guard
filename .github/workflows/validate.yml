@@ -30,6 +30,8 @@ jobs:
         run: python -m unittest discover -s anonimizer/tests -p "test_*.py"
       - name: Managed packaging contract
         run: python scripts/verify-managed-packaging.py
+      - name: Local Keychain signing policy regression
+        run: python -m unittest discover -s scripts -p 'test_signed_macos_build.py'
 
   managed-korgis-contract:
     name: Managed Korgis wheel contract
@@ -128,7 +130,7 @@ jobs:
       - name: Verify persisted native model selection and startup regressions
         run: cargo test --manifest-path src-tauri/Cargo.toml
       - name: Check packaging script syntax
-        run: bash -n scripts/build-sidecar.sh
+        run: bash -n scripts/build-sidecar.sh scripts/build-signed-macos.sh
 
   managed-package-macos:
     name: Managed macOS app bundle

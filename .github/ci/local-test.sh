@@ -27,7 +27,8 @@ PY
 node -e 'if (Number(process.versions.node.split(".")[0]) < 22) process.exit(1)'
 
 # Pure, fast source-contract checks first; no global installs or model downloads.
-bash -n scripts/build-sidecar.sh
+bash -n scripts/build-sidecar.sh scripts/build-signed-macos.sh
+python3 -m unittest discover -s scripts -p 'test_signed_macos_build.py'
 cargo fmt --check --manifest-path sidecar/Cargo.toml
 cargo fmt --check --manifest-path src-tauri/Cargo.toml
 node --experimental-strip-types --test \

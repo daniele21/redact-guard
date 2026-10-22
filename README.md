@@ -361,15 +361,51 @@ FastAPI documentation is available at `http://127.0.0.1:8000/docs`.
 
 ## Desktop development
 
-Tauri packaging is under active development.
+`pnpm tauri:dev` uses the external Korgis mode by default.
+`pnpm tauri:build-sidecar` without a pinned Korgis wheel also produces
+an external-runtime package. For a **managed Korgis app**, use this local
+Apple Silicon build contract instead.
+
+### Signed local macOS app with managed Korgis
+
+Requirements: macOS Apple Silicon; Python 3.13, Node/pnpm, Rust and Xcode
+Command Line Tools; a valid code-signing certificate and corresponding private
+key in the login Keychain. Reuse an existing Apple Development or Developer ID
+Application identity; the script does not create signing keys.
 
 ```bash
-pnpm tauri:dev
-pnpm tauri:build-sidecar
-pnpm tauri:build
+security find-identity -v -p codesigning
+
+# First run: select the certificate's 40-character SHA-1 once
+pnpm macos:build-local --identity <CERTIFICATE_SHA1>
+
+# Every later build automatically reuses the same identity
+pnpm macos:build-local
 ```
 
-Desktop distribution should remain experimental until model verification, cross-platform testing, code signing, and release automation are complete.
+Only the public certificate fingerprint is stored locally at
+`~/Library/Application Support/RedactGuard/build-signing-identity` with
+owner-only file permissions. If that identity expires, is removed or changes,
+the build **fails** instead of signing ad hoc or silently switching identity.
+Use `pnpm macos:build-local --check-signing` to verify it without building.
+
+The command clones the **exact pinned Korgis source commit** (or uses the
+optional `REDACTGUARD_KORGIS_SOURCE=/path/to/korgis` as a Git source),
+builds/verifies the wheel, packages the separate managed Python environments,
+and signs the app using Tauri. It then checks bundle signature integrity, the
+actual embedded signer certificate SHA-1, and the bundled Korgis source manifest.
+
+```bash
+open src-tauri/target/aarch64-apple-darwin/release/bundle/macos/RedactGuard.app
+```
+
+**Important:** Model downloads are separate, managed by Korgis. This local
+code signature is **not Apple notarization**; Developer ID distribution to
+other Macs requires notarization, and a self-signed/Apple Development identity
+is for local testing. PR/CI app artifacts are only ad-hoc signed and cannot
+reuse a private certificate held in your Mac's Keychain. Code signing is not
+proof of real-model inference, app UX acceptance or release readiness.
+
 
 ## Configuration
 
