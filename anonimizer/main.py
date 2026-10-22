@@ -26,7 +26,7 @@ logger = logging.getLogger("redactguard")
 async def cleanup_task():
     while True:
         await asyncio.sleep(60 * 5)  # Run every 5 minutes
-        cleanup_idle_sessions()
+        cleanup_idle_sessions(analysis_jobs.active_document_ids())
         logger.debug("Idle session cleanup completed.")
 
 @asynccontextmanager
