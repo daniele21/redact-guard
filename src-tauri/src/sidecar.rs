@@ -138,8 +138,7 @@ pub async fn start_backend(handle: &AppHandle) -> Result<(), String> {
     // endpoint first, but launch the API before loading the model.
     let (korgis_base_url, managed_korgis_port) = match mode {
         KorgisMode::External => (
-            env::var("KORGIS_BASE_URL")
-                .unwrap_or_else(|_| "http://127.0.0.1:1235/v1".to_string()),
+            env::var("KORGIS_BASE_URL").unwrap_or_else(|_| "http://127.0.0.1:1235/v1".to_string()),
             None,
         ),
         KorgisMode::Managed => {
@@ -173,7 +172,11 @@ pub async fn start_backend(handle: &AppHandle) -> Result<(), String> {
 
     if let Some(port) = managed_korgis_port {
         *handle.state::<SidecarState>().korgis_port.lock().unwrap() = Some(port);
-        log::info!("Starting managed Korgis on port {} with model {}", port, model);
+        log::info!(
+            "Starting managed Korgis on port {} with model {}",
+            port,
+            model
+        );
         start_korgis_server(handle, port, &model).await?;
         wait_for_http_health(
             &format!("http://127.0.0.1:{port}/health"),
