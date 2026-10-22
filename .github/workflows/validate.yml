@@ -82,6 +82,7 @@ jobs:
       - run: node --experimental-strip-types --test src/components/review/reviewGate.test.mjs
       - run: node --experimental-strip-types --test src/components/review/reviewVisits.test.mjs
       - run: node --experimental-strip-types --test src/hooks/documentQueue.test.mjs
+      - run: node --experimental-strip-types --test src/services/backendAddress.test.mjs
       - run: pnpm build
 
   rust:
