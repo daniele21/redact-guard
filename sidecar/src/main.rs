@@ -234,6 +234,7 @@ fn build_korgis_command(python_bin: &Path, port: u16, model: &str) -> Command {
         &port_str,
         "--model",
         model,
+        "--no-download",
     ]);
     if let Some(site) = bundled_site_packages(python_bin, "korgis") {
         cmd.env("PYTHONPATH", site);
