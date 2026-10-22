@@ -42,12 +42,14 @@ def delete_session(doc_id: str):
             session.operation_lock.release()
 
 
-def cleanup_idle_sessions():
-    """Evict only idle, unlocked sessions; never interrupt an active inference."""
+def cleanup_idle_sessions(protected_doc_ids: set[str] | None = None):
+    """Evict only idle, unleased sessions, never queued or in-flight jobs."""
     with _store_lock:
         now = datetime.now(timezone.utc)
         ttl = timedelta(minutes=config.session_ttl_minutes)
         for doc_id, session in tuple(_sessions.items()):
+            if doc_id in (protected_doc_ids or ()):
+                continue
             if not session.operation_lock.acquire(blocking=False):
                 continue
             try:
