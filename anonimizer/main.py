@@ -8,13 +8,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from config import config
 from api.routes_health import router as health_router
+from api.routes_models import router as model_router
 from api.routes_upload import router as upload_router
 from api.routes_profiles import router as profiles_router
 from api.routes_analyze import router as analyze_router
+from api.routes_jobs import router as jobs_router
 from api.routes_redact import router as redact_router
 from api.routes_cache import router as cache_router
 from api.routes_export import router as export_router
 from services.session_store import cleanup_idle_sessions
+from services.analysis_jobs import analysis_jobs
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -23,7 +26,7 @@ logger = logging.getLogger("redactguard")
 async def cleanup_task():
     while True:
         await asyncio.sleep(60 * 5)  # Run every 5 minutes
-        cleanup_idle_sessions()
+        cleanup_idle_sessions(analysis_jobs.active_document_ids())
         logger.debug("Idle session cleanup completed.")
 
 @asynccontextmanager
@@ -33,6 +36,7 @@ async def lifespan(app: FastAPI):
     yield
     # Shutdown
     task.cancel()
+    analysis_jobs.shutdown()
 
 app = FastAPI(
     title="RedactGuard API",
@@ -56,9 +60,11 @@ app.add_middleware(
 
 # Include routers
 app.include_router(health_router, prefix="/api", tags=["Health"])
+app.include_router(model_router, prefix="/api", tags=["Models"])
 app.include_router(upload_router, prefix="/api", tags=["Document"])
 app.include_router(profiles_router, prefix="/api", tags=["Profiles"])
 app.include_router(analyze_router, prefix="/api", tags=["Analyze"])
+app.include_router(jobs_router, prefix="/api", tags=["Jobs"])
 app.include_router(redact_router, prefix="/api", tags=["Redact"])
 app.include_router(cache_router, prefix="/api", tags=["Cache"])
 app.include_router(export_router, prefix="/api", tags=["Export"])

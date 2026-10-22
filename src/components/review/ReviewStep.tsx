@@ -1,741 +1,285 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { 
-  ChevronLeft, 
-  ChevronRight, 
-  Lock, 
-  Brain, 
-  RefreshCw, 
-  CheckSquare, 
-  Square, 
-  Play, 
-  Layers, 
-  Grid, 
-  FileText, 
-  CheckCircle2, 
-  AlertCircle, 
-  Eye, 
-  Sparkles 
-} from 'lucide-react';
-import { DocumentState } from '../../hooks/useDocument';
-import { ReviewDecision } from '../../types';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { AlertTriangle, ArrowRight, Check, CheckCircle2, ChevronLeft, ChevronRight, Eye, FileSearch, LockKeyhole, PanelRightClose, PanelRightOpen, Search, ShieldOff } from 'lucide-react';
+import type { DocumentState } from '../../hooks/useDocument';
+import type { PIIField, ReviewDecision } from '../../types';
 import { DocumentPanel } from './DocumentPanel';
-import { FindingsView } from './FindingsView';
-import { PIISidebar } from './PIISidebar';
-import { ReviewOverview } from './ReviewOverview';
 import { fieldId } from './reviewIdentity';
+import { reviewReadiness } from './reviewGate';
+import { reconcilePageVisits } from './reviewVisits';
 
-// Fixed skeleton line widths for grid card miniatures (avoids randomness in render)
-const SKELETON_WIDTHS = [82, 95, 71, 88, 64, 90, 76, 93, 68, 85, 73, 79, 91, 67, 86, 80, 72, 94, 62, 87, 77, 89, 66, 83, 70, 92, 75, 96, 63, 84, 78, 91];
-
-interface ReviewStepProps {
-  state: DocumentState;
-  onAnalyzePage: (pageNumber: number, force?: boolean) => Promise<void>;
-  onBatchAnalyzePages: (pageNumbers: number[], force?: boolean) => Promise<void>;
-  onApplyRedactions: (decisions: Record<string, ReviewDecision>) => Promise<void>;
-  onProceed: () => void;
+export interface ReviewDraft {
+  decisions: Record<string, ReviewDecision>;
+  visitedPages: number[];
 }
 
-export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyRedactions, onProceed }: ReviewStepProps) {
-  const [currentPage, setCurrentPage] = useState(1);
-  const [decisions, setDecisions] = useState<Record<string, ReviewDecision>>({});
-  const [workspaceView, setWorkspaceView] = useState<'overview' | 'findings' | 'document'>('overview');
-  const [isExporting, setIsExporting] = useState(false);
-  const [selectedPages, setSelectedPages] = useState<Set<number>>(new Set());
-  const [isSelectionMode, setIsSelectionMode] = useState(false);
-  const [viewMode, setViewMode] = useState<'document' | 'grid'>('document');
-  const [recentlyCompletedPages, setRecentlyCompletedPages] = useState<Set<number>>(new Set());
-  const prevAnalysisResultsRef = useRef<Record<number, unknown>>({});
-  
+interface Props {
+  state: DocumentState;
+  onAnalyzePage: (page: number, force?: boolean) => Promise<void>;
+  onBatchAnalyzePages: (pages: number[], force?: boolean) => Promise<void>;
+  onApplyRedactions: (decisions: Record<string, ReviewDecision>) => Promise<void>;
+  onCancelAnalysis: () => Promise<void>;
+  onProceed: () => void;
+  initialDraft?: ReviewDraft;
+  onDraftChange?: (docId: string, draft: ReviewDraft) => void;
+}
 
-  const totalPages = state.pages.length;
-  const currentResult = state.analysisResults[currentPage];
-  const currentPageData = state.pages.find(p => p.page_number === currentPage);
-  const isAnalyzing = state.isAnalyzing;
+interface Group {
+  id: string;
+  label: string;
+  type: string;
+  masked: string;
+  occurrences: Array<{ page: number; field: PIIField }>;
+}
 
-  // Every new finding starts with the policy-safe default: redact.
+const maskValue = (value: string): string => {
+  if (!value) return '••••';
+  return value.length <= 4 ? value[0] + '•••' : value.slice(0, 2) + '••••' + value.slice(-2);
+};
+
+export function ReviewStep({ state, onAnalyzePage, onBatchAnalyzePages, onApplyRedactions, onCancelAnalysis, onProceed, initialDraft, onDraftChange }: Props) {
+  const [page, setPage] = useState(1);
+  const [decisions, setDecisions] = useState<Record<string, ReviewDecision>>(() => initialDraft?.decisions ?? {});
+  const [visitedPages, setVisitedPages] = useState<Set<number>>(() => new Set(initialDraft?.visitedPages ?? []));
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
+  const [visibleGroups, setVisibleGroups] = useState(40);
+  const [inspectorOpen, setInspectorOpen] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const resultRef = useRef(state.analysisResults);
+  const decisionsResultRef = useRef(state.analysisResults);
+
+  const result = state.analysisResults[page];
+  const pageData = state.pages.find(item => item.page_number === page);
+  const total = state.pages.length;
+
+  // Invalidate review evidence only for reanalysed/failed pages. Incremental
+  // analysis of page N must not un-review already inspected pages 1..N-1.
   useEffect(() => {
-    Object.entries(state.analysisResults).forEach(([pageStr, result]) => {
-      const pageNumber = parseInt(pageStr);
-      setDecisions(prev => {
-        const next = { ...prev };
-        let changed = false;
-        result.pii_fields.forEach(field => {
-          const id = fieldId(field, pageNumber);
-          if (next[id] === undefined) {
-            next[id] = 'redact';
-            changed = true;
-          }
+    const previousResults = resultRef.current;
+    resultRef.current = state.analysisResults;
+    setVisitedPages(previous =>
+      reconcilePageVisits(previous, previousResults, state.analysisResults, state.analysisErrors, page)
+    );
+  }, [state.analysisResults, state.analysisErrors, page]);
+
+  useEffect(() => {
+    if (state.docId) onDraftChange?.(state.docId, { decisions, visitedPages: Array.from(visitedPages) });
+  }, [state.docId, decisions, visitedPages, onDraftChange]);
+
+  // A repeated analysis invalidates prior keep/not_pii decisions for the
+  // changed pages. New suggestions revert to the privacy-safe redact default.
+  useEffect(() => {
+    const prior = decisionsResultRef.current;
+    decisionsResultRef.current = state.analysisResults;
+    const changedPages = Object.entries(state.analysisResults)
+      .filter(([number, result]) => prior[Number(number)] !== result)
+      .map(([number]) => Number(number));
+    if (!changedPages.length) return;
+    setDecisions(previous => {
+      const next = { ...previous };
+      for (const number of changedPages) {
+        for (const field of prior[number]?.pii_fields ?? []) delete next[fieldId(field, number)];
+        for (const field of state.analysisResults[number].pii_fields) next[fieldId(field, number)] = 'redact';
+      }
+      return next;
+    });
+  }, [state.analysisResults]);
+
+  // Privacy-safe initial decision: redact every valid model-proposed finding.
+  useEffect(() => {
+    setDecisions(previous => {
+      const next = { ...previous };
+      let changed = false;
+      Object.entries(state.analysisResults).forEach(([pageValue, response]) => {
+        response.pii_fields.forEach(field => {
+          const id = fieldId(field, Number(pageValue));
+          if (next[id] === undefined) { next[id] = 'redact'; changed = true; }
         });
-        return changed ? next : prev;
       });
+      return changed ? next : previous;
     });
   }, [state.analysisResults]);
 
-  const overrides = useMemo(
-    () =>
-      Object.fromEntries(
-        Object.entries(decisions).map(([id, decision]) => [
+  const groups = useMemo(() => {
+    const entities = new Map<string, Group>();
+    const masked = new Map((state.summary?.entities ?? []).map(item => [item.entity_id, item.masked_value]));
+    Object.entries(state.analysisResults).forEach(([pageValue, response]) => {
+      const pageNumber = Number(pageValue);
+      response.pii_fields.forEach(field => {
+        const id = field.entity_id;
+        const existing = entities.get(id);
+        if (existing) existing.occurrences.push({ page: pageNumber, field });
+        else entities.set(id, {
           id,
-          decision === 'redact',
-        ]),
-      ) as Record<string, boolean>,
-    [decisions],
-  );
-
-  const excludedFields = useMemo(
-    () =>
-      new Set(
-        Object.entries(decisions)
-          .filter(([, decision]) => decision === 'not_pii')
-          .map(([id]) => id),
-      ),
-    [decisions],
-  );
-
-  // Detect newly completed pages and flash a "done" overlay briefly
-  useEffect(() => {
-    const prev = prevAnalysisResultsRef.current;
-    const current = state.analysisResults;
-    const newlyCompleted: number[] = Object.keys(current)
-      .map(Number)
-      .filter(pageNum => !prev[pageNum]);
-
-    if (newlyCompleted.length > 0) {
-      setRecentlyCompletedPages(existing => {
-        const next = new Set(existing);
-        newlyCompleted.forEach(p => next.add(p));
-        return next;
+          label: field.field_name,
+          type: field.pii_type,
+          masked: masked.get(id) ?? maskValue(field.value),
+          occurrences: [{ page: pageNumber, field }],
+        });
       });
-      newlyCompleted.forEach(pageNum => {
-        setTimeout(() => {
-          setRecentlyCompletedPages(existing => {
-            const next = new Set(existing);
-            next.delete(pageNum);
-            return next;
-          });
-        }, 2200);
-      });
-    }
+    });
+    return Array.from(entities.values()).sort((a, b) =>
+      b.occurrences.length - a.occurrences.length || a.label.localeCompare(b.label));
+  }, [state.analysisResults, state.summary]);
 
-    prevAnalysisResultsRef.current = current;
-  }, [state.analysisResults]);
+  const shownGroups = groups.filter(group =>
+    [group.label, group.type, group.masked].join(' ').toLowerCase().includes(query.toLowerCase()));
 
-  const toggleRedaction = (findingId: string) => {
-    setDecisions(prev => ({
-      ...prev,
-      [findingId]: prev[findingId] === 'redact' ? 'keep' : 'redact',
-    }));
-  };
+  const overrides = useMemo(() => Object.fromEntries(
+    Object.entries(decisions).map(([id, decision]) => [id, decision === 'redact'])
+  ) as Record<string, boolean>, [decisions]);
+  const excluded = useMemo(() => new Set(
+    Object.entries(decisions).filter(([, decision]) => decision === 'not_pii').map(([id]) => id)
+  ), [decisions]);
 
-  const toggleExclusion = (findingId: string) => {
-    setDecisions(prev => ({
-      ...prev,
-      [findingId]: prev[findingId] === 'not_pii' ? 'redact' : 'not_pii',
-    }));
-  };
-
-  const setFindingDecision = (
-    findingIds: string[],
-    decision: ReviewDecision,
-  ) => {
-    setDecisions(prev => {
-      const next = { ...prev };
-      findingIds.forEach(id => {
-        next[id] = decision;
+  const setGroupDecision = (group: Group, decision: ReviewDecision) => {
+    setError('');
+    setDecisions(previous => {
+      const next = { ...previous };
+      group.occurrences.forEach(({ page: sourcePage, field }) => {
+        next[fieldId(field, sourcePage)] = decision;
       });
       return next;
     });
   };
 
-  const redactAll = () => {
-    if (!currentResult) return;
-    setDecisions(prev => {
-      const next = { ...prev };
-      currentResult.pii_fields.forEach(field => {
-        next[fieldId(field, currentPage)] = 'redact';
-      });
-      return next;
-    });
+  const toggleOccurrence = (id: string) => {
+    setError('');
+    setDecisions(previous => ({ ...previous, [id]: previous[id] === 'keep' ? 'redact' : 'keep' }));
   };
 
-  const keepAll = () => {
-    if (!currentResult) return;
-    setDecisions(prev => {
-      const next = { ...prev };
-      currentResult.pii_fields.forEach(field => {
-        next[fieldId(field, currentPage)] = 'keep';
-      });
-      return next;
-    });
-  };
+  const gate = reviewReadiness(state, visitedPages.size, saving);
+  const canExport = gate.ready;
+  const exportReason = gate.reason;
 
-  const handleExport = async () => {
-    setIsExporting(true);
+  const exportReviewed = async () => {
+    if (!canExport) return;
+    if (!window.confirm('Confermi di aver verificato tutte le pagine e le scelte? L’AI può non individuare ogni informazione sensibile.')) return;
+    setSaving(true);
+    setError('');
     try {
       await onApplyRedactions(decisions);
       onProceed();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Impossibile applicare le decisioni.');
     } finally {
-      setIsExporting(false);
+      setSaving(false);
     }
   };
 
-  const handleJumpToOccurrence = (start: number) => {
-    const element = document.getElementById(`pii-${start}`);
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      element.classList.add('ring-4', 'ring-primary', 'ring-offset-2', 'rounded-sm', 'transition-all');
-      setTimeout(() => {
-        element.classList.remove('ring-4', 'ring-primary', 'ring-offset-2');
-      }, 2000);
-    }
+  const changePage = (next: number) => {
+    setPage(Math.max(1, Math.min(total, next)));
   };
 
-  const openOccurrence = (pageNumber: number, start: number | null) => {
-    setCurrentPage(pageNumber);
-    setViewMode('document');
-    setWorkspaceView('document');
-    if (start !== null) {
-      window.setTimeout(() => handleJumpToOccurrence(start), 50);
-    }
-  };
-
-  const togglePageSelection = (pageNum: number) => {
-    setSelectedPages(prev => {
-      const next = new Set(prev);
-      if (next.has(pageNum)) next.delete(pageNum);
-      else next.add(pageNum);
-      return next;
-    });
-  };
-
-  const selectAllPages = () => {
-    const all = new Set<number>();
-    for (let i = 1; i <= totalPages; i++) all.add(i);
-    setSelectedPages(all);
-  };
-
-  const deselectAllPages = () => {
-    setSelectedPages(new Set());
-  };
-
-  const analyzeSelected = () => {
-    if (selectedPages.size === 0) return;
-    onBatchAnalyzePages(Array.from(selectedPages));
-    setIsSelectionMode(false);
-  };
-
-  const analyzeAll = () => {
-    const all = [];
-    for (let i = 1; i <= totalPages; i++) all.push(i);
-    onBatchAnalyzePages(all);
+  const jumpTo = (group: Group) => {
+    const target = group.occurrences[0];
+    setSelectedId(group.id);
+    setPage(target.page);
+    // The active source is deliberately the only area where full document content is shown.
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-12rem)]">
-      <div className="shrink-0 bg-surface border-b border-outline-variant px-4 md:px-6 py-3 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-1 bg-surface-container rounded-xl p-1">
-          {([
-            ['overview', 'Overview'],
-            ['findings', 'Findings'],
-            ['document', 'Document'],
-          ] as const).map(([id, label]) => (
-            <button
-              key={id}
-              onClick={() => setWorkspaceView(id)}
-              className={
-                workspaceView === id
-                  ? 'px-4 py-2 rounded-lg bg-surface text-primary shadow-sm text-sm font-bold'
-                  : 'px-4 py-2 rounded-lg text-on-surface-variant text-sm font-semibold hover:text-on-surface'
-              }
-            >
-              {label}
-            </button>
-          ))}
+    <section className="flex min-h-0 flex-1 flex-col" aria-label="Revisione documento">
+      <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-5 lg:px-9">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Revisione del documento</h1>
+          <p className="mt-1 text-sm text-on-surface-variant">Controlla i rilevamenti nel contesto e decidi cosa proteggere.</p>
         </div>
-        <div className="hidden md:flex items-center gap-3 text-xs text-on-surface-variant">
-          <span>{state.summary?.pages_analyzed ?? state.analyzedCount}/{totalPages} pages analyzed</span>
-          {Object.keys(state.analysisErrors).length > 0 && (
-            <span className="px-2.5 py-1 rounded-full bg-error/10 text-error font-bold">
-              {Object.keys(state.analysisErrors).length} failed
-            </span>
-          )}
+        <div className="flex flex-wrap items-center gap-3 text-xs text-on-surface-variant">
+          <span className="flex items-center gap-1"><FileSearch size={15} aria-hidden="true" /> {state.summary?.pages_analyzed ?? state.analyzedCount}/{total} pagine analizzate</span>
+          <span>{groups.length} entità rilevate</span>
+          <span>{visitedPages.size}/{total} pagine aperte</span>
+          <button type="button" aria-expanded={inspectorOpen} aria-controls="pii-inspector"
+            onClick={() => setInspectorOpen(current => !current)}
+            className="inline-flex min-h-10 items-center gap-2 rounded-full border border-outline-variant px-3 py-2 text-xs text-on-surface hover:border-primary/60 focus-visible:outline-2 focus-visible:outline-primary">
+            {inspectorOpen ? <PanelRightClose size={16} aria-hidden="true" /> : <PanelRightOpen size={16} aria-hidden="true" />}
+            {inspectorOpen ? 'Nascondi rilevamenti' : 'Mostra rilevamenti'}
+          </button>
         </div>
       </div>
 
-      {workspaceView === 'overview' ? (
-        <ReviewOverview
-          state={state}
-          decisions={decisions}
-          onAnalyzeAll={analyzeAll}
-          onOpenFindings={() => setWorkspaceView('findings')}
-          onOpenDocument={() => setWorkspaceView('document')}
-        />
-      ) : workspaceView === 'findings' ? (
-        <FindingsView
-          state={state}
-          decisions={decisions}
-          onSetDecision={setFindingDecision}
-          onOpenOccurrence={openOccurrence}
-        />
-      ) : (
-        <>
-      {/* Toolbar */}
-      <div className="flex items-center justify-between bg-surface p-4 border-b border-outline-variant shrink-0">
-        <div className="flex items-center gap-4">
-          {viewMode === 'document' && (
-            <div className="flex items-center gap-4 bg-surface-container rounded-full p-1">
-              <button
-                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                disabled={currentPage === 1 || isAnalyzing}
-                className="p-2 rounded-full hover:bg-surface disabled:opacity-50 transition-colors"
-              >
-                <ChevronLeft className="w-5 h-5" />
+      <div className={'grid min-h-0 flex-1 gap-4 px-4 pb-4 lg:px-8 ' + (inspectorOpen ? 'min-[900px]:grid-cols-[minmax(0,1fr)_280px] xl:grid-cols-[minmax(0,1fr)_340px]' : 'grid-cols-1')}>
+        <div className="flex min-h-0 flex-col gap-3">
+          <div className="rg-context-card flex flex-wrap items-center justify-between gap-3 rounded-2xl px-4 py-3">
+            <div className="flex items-center gap-3 text-sm">
+              <button type="button" aria-label="Pagina precedente" disabled={page <= 1} onClick={() => changePage(page - 1)} className="rounded-lg p-2 hover:bg-surface-container-high disabled:opacity-40"><ChevronLeft size={18} /></button>
+              <span className="min-w-20 text-center font-medium">Pagina {page} / {total}</span>
+              <button type="button" aria-label="Pagina successiva" disabled={page >= total} onClick={() => changePage(page + 1)} className="rounded-lg p-2 hover:bg-surface-container-high disabled:opacity-40"><ChevronRight size={18} /></button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={() => void onAnalyzePage(page, Boolean(result))} disabled={state.isAnalyzing || !pageData} className="rg-secondary-button">
+                {result ? 'Rianalizza pagina' : 'Analizza pagina'}
               </button>
-              <span className="text-sm font-medium text-on-surface min-w-[80px] text-center">
-                Page {currentPage} of {totalPages}
-              </span>
-              <button
-                onClick={() => setCurrentPage(p => Math.max(1, Math.min(totalPages, p + 1)))}
-                disabled={currentPage === totalPages || isAnalyzing}
-                className="p-2 rounded-full hover:bg-surface disabled:opacity-50 transition-colors"
-              >
-                <ChevronRight className="w-5 h-5" />
+              <button type="button" onClick={() => void onBatchAnalyzePages(state.pages.map(item => item.page_number))} disabled={state.isAnalyzing || !total} className="rg-secondary-button">
+                {state.isAnalyzing ? 'Analisi in corso…' : 'Analizza tutte'}
               </button>
             </div>
-          )}
-
-          {/* Segmented View Switcher */}
-          <div className="flex bg-surface-container rounded-full p-1 border border-outline-variant/30">
-            <button
-              onClick={() => setViewMode('document')}
-              className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-2 ${viewMode === 'document' ? 'bg-primary text-on-primary shadow-md shadow-primary/10' : 'text-on-surface-variant hover:text-on-surface'}`}
-            >
-              <FileText className="w-3.5 h-3.5" />
-              Editor
-            </button>
-            <button
-              onClick={() => setViewMode('grid')}
-              className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all flex items-center gap-2 ${viewMode === 'grid' ? 'bg-primary text-on-primary shadow-md shadow-primary/10' : 'text-on-surface-variant hover:text-on-surface'}`}
-            >
-              <Grid className="w-3.5 h-3.5" />
-              Grid View
-            </button>
           </div>
-          
-          {viewMode === 'document' && (
-            <button
-              onClick={() => setIsSelectionMode(!isSelectionMode)}
-              className={`p-2.5 rounded-full transition-all ${isSelectionMode ? 'bg-primary text-on-primary shadow-lg shadow-primary/20' : 'bg-surface-container text-on-surface-variant hover:bg-surface-container-high'}`}
-              title="Toggle Page Selection Mode"
-            >
-              <CheckSquare className="w-5 h-5" />
-            </button>
-          )}
+
+          {state.analysisErrors[page] && <div role="alert" className="flex items-center gap-2 rounded-xl border border-error/30 bg-error/10 p-4 text-sm text-error"><AlertTriangle size={19} aria-hidden="true" /> Analisi della pagina non riuscita: {state.analysisErrors[page]}</div>}
+          {!state.analysisErrors[page] && result?.warning && <div role="alert" className="flex items-center gap-2 rounded-xl border border-warning/30 bg-warning/10 p-4 text-sm text-warning"><AlertTriangle size={19} aria-hidden="true" /> {result.warning}</div>}
+          {state.job?.cancellable && <div role="status" className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-primary/5 p-3 text-sm text-primary"><span>Job locale {state.job.status} · {state.job.pages_completed}/{state.job.pages_total} pagine completate{state.job.current_page ? ' · pagina ' + state.job.current_page : ''}. Puoi continuare a navigare.</span><button type="button" className="rg-secondary-button" onClick={() => void onCancelAnalysis()} disabled={state.job.status === 'cancelling'}>{state.job.status === 'cancelling' ? 'Arresto dopo la pagina…' : 'Annulla analisi'}</button></div>}
+
+          <div className="min-h-[260px] flex-1 overflow-y-auto rounded-2xl border border-outline-variant/70 bg-surface-container-lowest p-2 lg:min-h-[320px]">
+            {pageData ? <DocumentPanel
+              text={pageData.text}
+              fields={result?.pii_fields ?? []}
+              redactionOverrides={overrides}
+              excludedFields={excluded}
+              onToggleRedaction={toggleOccurrence}
+              pageNumber={page}
+            /> : <div className="flex min-h-[400px] items-center justify-center text-sm text-on-surface-variant">Nessuna pagina disponibile</div>}
+          </div>
+          <p className="text-xs text-on-surface-variant">Testo originale estratto dal PDF, visibile solo nel documento locale. Le evidenziazioni indicano la decisione di export (blu: oscura; ambra: mantieni). La lista laterale resta mascherata. L'AI può non trovare tutti i dati sensibili.</p>
         </div>
 
-        <div className="flex-1 flex justify-center px-4">
-          {viewMode === 'grid' ? (
-            <div className="flex items-center gap-4 bg-surface-container-high rounded-2xl px-6 py-2 border border-outline-variant/50 animate-in fade-in zoom-in duration-300">
-              <span className="text-xs font-bold text-on-surface-variant">
-                {selectedPages.size} of {totalPages} Pages Selected
-              </span>
-              <div className="w-px h-6 bg-outline-variant/30" />
-              <div className="flex gap-2">
-                <button onClick={selectAllPages} className="text-xs font-bold text-on-surface hover:text-primary transition-colors">Select All</button>
-                <button onClick={deselectAllPages} className="text-xs font-bold text-on-surface hover:text-primary transition-colors">Clear</button>
-              </div>
-              <div className="w-px h-6 bg-outline-variant/30" />
-              <button
-                onClick={analyzeSelected}
-                disabled={selectedPages.size === 0 || isAnalyzing}
-                className="flex items-center gap-2 px-4 py-1.5 bg-primary text-on-primary rounded-lg text-xs font-bold hover:bg-primary/95 transition-all disabled:opacity-50"
-              >
-                <Play className="w-3.5 h-3.5 fill-current" />
-                Scan Selected ({selectedPages.size})
-              </button>
-              <button
-                onClick={analyzeAll}
-                disabled={isAnalyzing}
-                className="flex items-center gap-2 px-3 py-1.5 bg-surface text-on-surface border border-outline-variant rounded-lg text-xs font-bold hover:bg-surface-container transition-colors disabled:opacity-50"
-              >
-                <Layers className="w-3.5 h-3.5" />
-                Scan All
-              </button>
-            </div>
-          ) : isSelectionMode ? (
-            <div className="flex items-center gap-4 bg-surface-container-high rounded-2xl px-6 py-2 border border-primary/30 animate-in fade-in zoom-in duration-300">
-              <span className="text-sm font-bold text-primary">{selectedPages.size} pages selected</span>
-              <div className="w-px h-6 bg-outline-variant/30" />
-              <div className="flex gap-2">
-                <button onClick={selectAllPages} className="text-xs font-bold text-on-surface hover:text-primary transition-colors">Select All</button>
-                <button onClick={deselectAllPages} className="text-xs font-bold text-on-surface hover:text-primary transition-colors">None</button>
-              </div>
-              <div className="w-px h-6 bg-outline-variant/30" />
-              <button
-                onClick={analyzeSelected}
-                disabled={selectedPages.size === 0 || isAnalyzing}
-                className="flex items-center gap-2 px-4 py-1.5 bg-primary text-on-primary rounded-lg text-xs font-bold hover:bg-primary/90 transition-all disabled:opacity-50"
-              >
-                <Play className="w-3.5 h-3.5 fill-current" />
-                Run Selected
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-4">
-              {!currentResult ? (
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => onAnalyzePage(currentPage)}
-                    disabled={isAnalyzing}
-                    className="flex items-center gap-2 px-6 py-2 bg-primary text-on-primary rounded-full font-bold hover:bg-primary/90 transition-all hover:scale-105 active:scale-95 shadow-lg shadow-primary/20 disabled:opacity-50"
-                  >
-                    <Brain className="w-5 h-5" />
-                    Scan Page {currentPage}
+        {inspectorOpen && <aside id="pii-inspector" aria-label="Rilevamenti e decisioni" className="rg-context-card flex min-h-[260px] flex-col rounded-2xl p-4">
+          <div className="mb-4">
+            <h2 className="text-lg font-semibold">Rilevamenti</h2>
+            <p className="mt-1 text-xs leading-5 text-on-surface-variant">Valori mascherati nell’elenco. Scegli una voce per verificarla nel documento.</p>
+          </div>
+          <label className="mb-4 flex items-center gap-2 rounded-xl border border-outline-variant px-3 py-2.5">
+            <Search size={17} className="text-on-surface-variant" aria-hidden="true" />
+            <span className="sr-only">Cerca rilevamenti</span>
+            <input value={query} onChange={event => { setQuery(event.target.value); setVisibleGroups(40); }} placeholder="Cerca tipo o categoria…" className="w-full bg-transparent text-sm outline-none placeholder:text-on-surface-variant" />
+          </label>
+          <div className="max-h-[54vh] flex-1 space-y-2 overflow-y-auto pr-1">
+            {shownGroups.length ? shownGroups.slice(0, visibleGroups).map(group => {
+              const groupDecisions = group.occurrences.map(item => decisions[fieldId(item.field, item.page)] ?? 'redact');
+              const decision = groupDecisions.every(item => item === groupDecisions[0]) ? groupDecisions[0] : 'mixed';
+              const selected = selectedId === group.id;
+              return (
+                <article key={group.id} className={'rounded-xl border p-3 ' + (selected ? 'border-primary/60 bg-primary/5' : 'border-outline-variant/60')}>
+                  <button type="button" onClick={() => jumpTo(group)} className="mb-3 w-full text-left">
+                    <span className="block text-xs text-on-surface-variant">{group.label} · {group.occurrences.length} occorrenze</span>
+                    <span className="mt-1 block truncate font-mono text-sm text-on-surface">{group.masked}</span>
+                    <span className="mt-1 block text-xs text-primary">Vai al contesto · pagina {group.occurrences[0].page} <ArrowRight size={12} className="inline" aria-hidden="true" /></span>
                   </button>
-                  <button
-                    onClick={analyzeAll}
-                    disabled={isAnalyzing}
-                    className="flex items-center gap-2 px-4 py-2 bg-surface text-on-surface border border-outline-variant rounded-full font-bold hover:bg-surface-container transition-all disabled:opacity-50"
-                  >
-                    <Layers className="w-5 h-5" />
-                    Scan All Pages
-                  </button>
-                </div>
-              ) : (
-                <div className="flex items-center gap-4 bg-surface-container-high rounded-2xl px-4 py-2 border border-outline-variant/50">
-                  <div className="flex flex-col">
-                    <span className="text-[10px] font-bold text-primary uppercase tracking-wider">Analysis Complete</span>
-                    <span className="text-xs text-on-surface-variant font-medium">
-                      {currentResult.pii_fields.length} PII fields found
-                    </span>
+                  <div className="grid grid-cols-3 gap-1" role="group" aria-label={'Decisione per tutte le occorrenze di ' + group.label}>
+                    <button type="button" onClick={() => setGroupDecision(group, 'redact')} aria-pressed={decision === 'redact'} className={'rounded-lg px-1 py-2 text-xs ' + (decision === 'redact' ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface-variant')}><Check size={13} className="mx-auto mb-1" aria-hidden="true" />Oscura</button>
+                    <button type="button" onClick={() => setGroupDecision(group, 'keep')} aria-pressed={decision === 'keep'} className={'rounded-lg px-1 py-2 text-xs ' + (decision === 'keep' ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface-variant')}><Eye size={13} className="mx-auto mb-1" aria-hidden="true" />Mantieni</button>
+                    <button type="button" onClick={() => setGroupDecision(group, 'not_pii')} aria-pressed={decision === 'not_pii'} className={'rounded-lg px-1 py-2 text-xs ' + (decision === 'not_pii' ? 'bg-primary text-on-primary' : 'bg-surface-container-high text-on-surface-variant')}><ShieldOff size={13} className="mx-auto mb-1" aria-hidden="true" />Non PII</button>
                   </div>
-                  <div className="w-px h-8 bg-outline-variant/30" />
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => onAnalyzePage(currentPage, true)}
-                      disabled={isAnalyzing}
-                      className="flex items-center gap-2 px-3 py-1.5 bg-surface text-on-surface border border-outline-variant rounded-lg text-xs font-bold hover:bg-surface-container transition-colors disabled:opacity-50"
-                      title="Re-scan ignoring cache"
-                    >
-                      <RefreshCw className={`w-3.5 h-3.5 ${isAnalyzing ? 'animate-spin' : ''}`} />
-                      Re-scan
-                    </button>
-                    <button
-                      onClick={analyzeAll}
-                      disabled={isAnalyzing}
-                      className="flex items-center gap-2 px-3 py-1.5 bg-surface text-on-surface border border-outline-variant rounded-lg text-xs font-bold hover:bg-surface-container transition-colors disabled:opacity-50"
-                    >
-                      <Layers className="w-3.5 h-3.5" />
-                      Scan All
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+                </article>
+              );
+            }) : <p className="rounded-xl bg-surface-container-low p-5 text-sm text-on-surface-variant">{groups.length ? 'Nessuna corrispondenza.' : 'Nessun rilevamento. Analizza il documento prima di interpretare questo risultato.'}</p>}
+            {shownGroups.length > visibleGroups && <button type="button" onClick={() => setVisibleGroups(count => count + 40)} className="w-full rounded-xl border border-outline-variant px-4 py-3 text-sm text-primary hover:bg-surface-container-high">Mostra altri rilevamenti ({shownGroups.length - visibleGroups})</button>}
+          </div>
+        </aside>}
+      </div>
 
-        <button
-          onClick={handleExport}
-          disabled={isExporting || state.analyzedCount === 0}
-          className="flex items-center gap-2 px-6 py-2 bg-on-surface text-surface-container-lowest rounded-full font-medium hover:bg-on-surface-variant transition-colors disabled:opacity-50"
-        >
-          {isExporting ? (
-             <div className="w-4 h-4 border-2 border-surface/30 border-t-surface rounded-full animate-spin" />
-          ) : (
-            <Lock className="w-4 h-4" />
-          )}
-          Apply & Export
+      <div className="flex flex-wrap items-center justify-between gap-4 border-t border-outline-variant/60 bg-surface-container-lowest/95 px-5 py-4 lg:px-9">
+        <div className="min-w-0">
+          {canExport ? <p className="flex items-center gap-2 text-sm text-success"><CheckCircle2 size={18} aria-hidden="true" /> Pagine analizzate e aperte per revisione</p>
+            : <p role="status" className="flex items-start gap-2 text-sm text-warning"><AlertTriangle size={17} className="mt-0.5 shrink-0" aria-hidden="true" /> {exportReason}</p>}
+          <p className="mt-1 text-xs text-on-surface-variant">La verifica umana è necessaria: nessuna analisi AI garantisce di trovare tutti i dati sensibili.</p>
+          {error && <p role="alert" className="mt-2 text-sm text-error">{error}</p>}
+        </div>
+        <button type="button" onClick={() => void exportReviewed()} disabled={!canExport} className="rg-primary-button flex items-center gap-2">
+          <LockKeyhole size={16} aria-hidden="true" /> {saving ? 'Applicazione…' : 'Conferma ed esporta'} <ArrowRight size={16} aria-hidden="true" />
         </button>
       </div>
-
-      {/* Main Content */}
-      <div className="flex-1 flex gap-6 p-6 min-h-0">
-        {viewMode === 'grid' ? (
-          <div className="flex-1 overflow-y-auto p-6 bg-surface-container-low/30 rounded-3xl border border-outline-variant/30">
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-              {state.pages.map(p => {
-                const result = state.analysisResults[p.page_number];
-                const isSelected = selectedPages.has(p.page_number);
-                const isCurrent = currentPage === p.page_number;
-                const isPending = state.pendingPages.includes(p.page_number);
-                const isPageAnalyzing = state.currentAnalyzingPage === p.page_number;
-                const isRecentlyDone = recentlyCompletedPages.has(p.page_number);
-                const isLoadingState = isPending || isPageAnalyzing;
-                
-                return (
-                  <div
-                    key={p.page_number}
-                    className={`
-                      relative group flex flex-col aspect-[3/4.2] rounded-2xl border transition-all duration-300 overflow-hidden bg-surface shadow-sm hover:shadow-xl hover:scale-[1.02] cursor-pointer
-                      ${isSelected ? 'border-primary ring-2 ring-primary/20' : 'border-outline-variant hover:border-primary/50'}
-                      ${isCurrent ? 'ring-2 ring-primary ring-offset-2' : ''}
-                      ${isRecentlyDone ? 'ring-2 ring-success/60 border-success/40' : ''}
-                    `}
-                    onClick={() => {
-                      setCurrentPage(p.page_number);
-                      setViewMode('document');
-                    }}
-                  >
-                    {/* Checkbox button */}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        togglePageSelection(p.page_number);
-                      }}
-                      className="absolute top-3 right-3 z-20 p-1.5 rounded-lg bg-surface/90 backdrop-blur-sm border border-outline-variant hover:border-primary transition-all text-on-surface shadow-sm"
-                    >
-                      {isSelected ? (
-                        <CheckSquare className="w-4.5 h-4.5 text-primary" />
-                      ) : (
-                        <Square className="w-4.5 h-4.5 text-outline" />
-                      )}
-                    </button>
-
-                    {/* Miniature Page Content */}
-                    <div className="flex-1 p-3 pt-9 font-mono text-[6.5px] leading-[1.2] text-on-surface-variant overflow-hidden select-none relative">
-                      {isLoadingState ? (
-                        /* Skeleton shimmer lines */
-                        <div className="space-y-1 h-full overflow-hidden">
-                          {SKELETON_WIDTHS.slice(0, 24).map((w, i) => (
-                            <div
-                              key={i}
-                              className="h-1.5 rounded-full bg-on-surface/8 animate-pulse"
-                              style={{ width: `${w}%`, animationDelay: `${(i % 6) * 80}ms` }}
-                            />
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="space-y-0.5 h-full overflow-hidden">
-                          {p.text.split('\n').slice(0, 32).map((line, idx) => {
-                            if (!result) {
-                              return <div key={idx} className="truncate tracking-tight opacity-65">{line || ' '}</div>;
-                            }
-                            
-                            const words = line.split(' ');
-                            return (
-                              <div key={idx} className="truncate tracking-tight flex flex-wrap gap-x-0.5 gap-y-0 opacity-90">
-                                {words.map((word, wIdx) => {
-                                  const cleanWord = word.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,"");
-                                  const isPII = result.pii_fields.some(f => f.value.toLowerCase().includes(cleanWord.toLowerCase()) && cleanWord.length > 2);
-                                  if (isPII && cleanWord.length > 0) {
-                                    return (
-                                      <span key={wIdx} className="bg-primary/30 text-primary px-0.5 rounded-[1px] font-bold text-[5.5px]">
-                                        {word}
-                                      </span>
-                                    );
-                                    
-                                  }
-                                  return <span key={wIdx} className="opacity-70">{word}</span>;
-                                })}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                      
-                      <div className="absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-surface to-transparent pointer-events-none" />
-                    </div>
-
-                    {/* Status Badge */}
-                    <div className="p-3 border-t border-outline-variant bg-surface-container/50 flex items-center justify-between text-xs z-10">
-                      <div className="flex items-center gap-1.5">
-                        {isPageAnalyzing ? (
-                          <>
-                            <div className="w-3.5 h-3.5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-                            <span className="font-bold text-primary animate-pulse">Scanning...</span>
-                          </>
-                        ) : isPending ? (
-                          <>
-                            <div className="w-3.5 h-3.5 border-2 border-outline/20 border-t-on-surface-variant rounded-full animate-spin" />
-                            <span className="font-medium text-on-surface-variant">Queued</span>
-                          </>
-                        ) : result ? (
-                          <>
-                            <CheckCircle2 className="w-3.5 h-3.5 text-success" />
-                            <span className="font-bold text-success">{result.pii_fields.length} PII</span>
-                          </>
-                        ) : (
-                          <>
-                            <AlertCircle className="w-3.5 h-3.5 text-outline" />
-                            <span className="text-on-surface-variant">Not Scanned</span>
-                          </>
-                        )}
-                      </div>
-                      
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 bg-surface-container-high rounded border border-outline-variant text-on-surface-variant">
-                        Page {p.page_number}
-                      </span>
-                    </div>
-
-                    {/* Hover actions overlay — hidden while loading */}
-                    {!isLoadingState && (
-                      <div className="absolute inset-0 bg-surface/50 backdrop-blur-[1px] opacity-0 group-hover:opacity-100 flex items-center justify-center gap-2 transition-all duration-300 z-10">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onAnalyzePage(p.page_number, !!result);
-                          }}
-                          disabled={isAnalyzing}
-                          className="p-2.5 rounded-full bg-primary text-on-primary shadow-lg hover:scale-110 active:scale-95 transition-all"
-                          title={result ? "Re-scan Page" : "Scan Page"}
-                        >
-                          <RefreshCw className={`w-4 h-4 ${isPageAnalyzing ? 'animate-spin' : ''}`} />
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setCurrentPage(p.page_number);
-                            setViewMode('document');
-                          }}
-                          className="p-2.5 rounded-full bg-surface text-on-surface border border-outline-variant shadow-lg hover:scale-110 active:scale-95 transition-all"
-                          title="Open in Editor"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
-                      </div>
-                    )}
-
-                    {/* Scanning active overlay */}
-                    {isPageAnalyzing && (
-                      <div className="absolute inset-0 bg-primary/5 flex flex-col items-center justify-center z-20 pointer-events-none">
-                        <div className="w-8 h-8 border-[3px] border-primary/20 border-t-primary rounded-full animate-spin mb-2" />
-                        <span className="text-[9px] font-bold text-primary tracking-wide uppercase animate-pulse">Scanning</span>
-                      </div>
-                    )}
-
-                    {/* Recently completed flash overlay */}
-                    {isRecentlyDone && (
-                      <div className="absolute inset-0 bg-success/10 flex flex-col items-center justify-center z-25 pointer-events-none animate-in fade-in duration-300">
-                        <div className="bg-success text-on-primary rounded-2xl px-3 py-2 flex items-center gap-2 shadow-lg shadow-success/20">
-                          <CheckCircle2 className="w-4 h-4" />
-                          <span className="text-[10px] font-bold tracking-wide uppercase">Done</span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        ) : (
-          <>
-            <div className="flex-[2] min-w-0 flex flex-col gap-4">
-              {state.analysisErrors[currentPage] && (
-                <div className="shrink-0 flex items-start gap-3 rounded-2xl border border-error/20 bg-error/5 px-4 py-3">
-                  <AlertCircle className="w-5 h-5 text-error mt-0.5" />
-                  <div>
-                    <p className="text-sm font-bold text-error">Page analysis failed</p>
-                    <p className="text-xs text-on-surface-variant mt-0.5">
-                      {state.analysisErrors[currentPage]}
-                    </p>
-                  </div>
-                </div>
-              )}
-              {!state.analysisErrors[currentPage] && currentResult?.warning && (
-                <div className="shrink-0 flex items-start gap-3 rounded-2xl border border-warning/20 bg-warning/5 px-4 py-3">
-                  <AlertCircle className="w-5 h-5 text-warning mt-0.5" />
-                  <div>
-                    <p className="text-sm font-bold text-warning">Review required</p>
-                    <p className="text-xs text-on-surface-variant mt-0.5">
-                      {currentResult.warning}
-                    </p>
-                  </div>
-                </div>
-              )}
-              {isSelectionMode && (
-                <div className="bg-surface-container p-4 rounded-2xl border border-primary/20 flex flex-wrap gap-2 max-h-32 overflow-y-auto">
-                  {state.pages.map(p => (
-                    <button
-                      key={p.page_number}
-                      onClick={() => togglePageSelection(p.page_number)}
-                      className={`
-                        flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all border
-                        ${selectedPages.has(p.page_number) 
-                          ? 'bg-primary text-on-primary border-primary shadow-md' 
-                          : 'bg-surface text-on-surface-variant border-outline-variant hover:border-primary/50'}
-                      `}
-                    >
-                      {selectedPages.has(p.page_number) ? <CheckSquare className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5" />}
-                      Page {p.page_number}
-                    </button>
-                  ))}
-                </div>
-              )}
-              
-              <div className="flex-1 overflow-y-auto relative">
-                {currentPageData ? (
-                  <DocumentPanel 
-                    text={currentPageData.text}
-                    fields={currentResult?.pii_fields || []}
-                    redactionOverrides={overrides}
-                    excludedFields={excludedFields}
-                    onToggleRedaction={toggleRedaction}
-                    pageNumber={currentPage}
-                  />
-                ) : (
-                  <div className="h-full flex items-center justify-center text-outline">
-                    Page content not found
-                  </div>
-                )}
-
-                {/* Document view scanning/pending overlay for current page */}
-                {(state.currentAnalyzingPage === currentPage || state.pendingPages.includes(currentPage)) && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-surface/70 backdrop-blur-[2px] z-20 rounded-xl animate-in fade-in duration-200">
-                    {state.currentAnalyzingPage === currentPage ? (
-                      <>
-                        <div className="w-10 h-10 border-[3px] border-primary/20 border-t-primary rounded-full animate-spin" />
-                        <div className="flex flex-col items-center gap-1">
-                          <span className="text-sm font-bold text-primary animate-pulse">Analyzing page {currentPage}…</span>
-                          <span className="text-xs text-on-surface-variant">AI is detecting PII fields</span>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <div className="w-8 h-8 border-[3px] border-on-surface-variant/20 border-t-on-surface-variant rounded-full animate-spin" />
-                        <div className="flex flex-col items-center gap-1">
-                          <span className="text-sm font-bold text-on-surface-variant">Page {currentPage} is queued</span>
-                          <span className="text-xs text-on-surface-variant/70">Waiting for previous pages to finish</span>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                )}
-
-                {/* Recently completed flash for current page */}
-                {recentlyCompletedPages.has(currentPage) && (
-                  <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30 animate-in fade-in slide-in-from-top-2 duration-300">
-                    <div className="bg-success text-on-primary rounded-full px-4 py-2 flex items-center gap-2 shadow-lg shadow-success/20">
-                      <CheckCircle2 className="w-4 h-4" />
-                      <span className="text-xs font-bold">Scan complete</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-            
-            <div className="flex-1 min-w-[320px] max-w-[400px]">
-              <PIISidebar 
-                fields={currentResult?.pii_fields || []}
-                allResults={state.analysisResults}
-                pageNumber={currentPage}
-                cacheHit={currentResult?.cache_hit || false}
-                redactionOverrides={overrides}
-                excludedFields={excludedFields}
-                onToggleRedaction={toggleRedaction}
-                onToggleExclusion={toggleExclusion}
-                onRedactAll={redactAll}
-                onKeepAll={keepAll}
-                isAnalyzing={isAnalyzing}
-                onJumpToOccurrence={handleJumpToOccurrence}
-                onNavigateToPage={(p) => setCurrentPage(p)}
-              />
-            </div>
-          </>
-        )}
-      </div>
-        </>
-      )}
-    </div>
+    </section>
   );
 }

@@ -1,31 +1,32 @@
-import React from 'react';
-import { PIIField } from '../../types';
-import { PII_CATEGORIES } from '../../config/theme.config';
+import type { PIIField } from '../../types';
 
 interface PIIHighlightProps {
-  key?: React.Key;
   field: PIIField;
   isRedacted: boolean;
   onToggle: () => void;
 }
 
+// The source canvas shows original text so inspection does not change the
+// default-safe 'redact' decision. Inspector lists remain masked.
 export function PIIHighlight({ field, isRedacted, onToggle }: PIIHighlightProps) {
-  const category = PII_CATEGORIES[field.pii_type] || { color: 'pii-secret', label: field.pii_type };
-  const colorClass = category.color;
-
+  const decision = isRedacted ? 'Oscura' : 'Mantieni';
+  const action = isRedacted ? 'mantenere' : 'oscurare';
   return (
-    <span 
+    <button
+      type="button"
       onClick={onToggle}
-      className={`
-        inline-flex items-center mx-0.5 px-1.5 rounded-md cursor-pointer transition-all duration-200 border-b-2
-        ${isRedacted 
-          ? 'bg-surface-container-high text-on-surface-variant border-outline-variant line-through opacity-70'
-          : `bg-${colorClass}/10 text-on-surface border-${colorClass}/50 hover:bg-${colorClass}/20`
-        }
-      `}
-      title={`${field.field_name} (${category.label})\nClick to toggle redaction`}
+      aria-label={field.field_name + '. Decisione attuale: ' + decision + '. Attiva per ' + action + '.'}
+      aria-pressed={!isRedacted}
+      title={field.field_name + ' · ' + decision + ' nell’export · Cambia decisione'}
+      className={
+        'mx-0.5 inline rounded-md border-b-2 px-1 py-0.5 font-medium transition-colors ' +
+        'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary ' +
+        (isRedacted
+          ? 'border-primary bg-primary/15 text-on-surface hover:bg-primary/25'
+          : 'border-warning bg-warning/10 text-on-surface hover:bg-warning/20')
+      }
     >
-      {isRedacted ? field.redacted_value : field.value}
-    </span>
+      {field.value}
+    </button>
   );
 }

@@ -1,13 +1,16 @@
 import uuid
 import hashlib
+import json
 from datetime import datetime, timezone
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from config import config
 from domain.models import UploadResponse, UploadResponsePage, DocumentSession
 from services.pdf_converter import extract_pdf_pages_from_bytes
-from services.profile_service import load_profile
+from services.profile_service import load_profile, get_all_pii_types
+from services.prompt_builder import build_system_prompt
 from utils.markdown_utils import preprocess_pages_for_pii
 from services.session_store import save_session
+from services.model_selection import get_selected_model, ModelPreferenceError
 
 router = APIRouter()
 
@@ -21,6 +24,20 @@ async def upload_document(
         load_profile(profile)
     except FileNotFoundError:
         raise HTTPException(status_code=400, detail=f"Profile '{profile}' not found.")
+
+    # Freeze the resolved policy at import. Edits to the library only affect
+    # subsequent documents, never an in-flight analysis.
+    try:
+        resolved_types = get_all_pii_types(profile)
+        resolved_prompt = build_system_prompt(profile, types=resolved_types)
+        policy_digest = hashlib.sha256(
+            json.dumps(
+                [item.model_dump() for item in resolved_types],
+                sort_keys=True, ensure_ascii=False,
+            ).encode("utf-8")
+        ).hexdigest()
+    except (ValueError, OSError) as exc:
+        raise HTTPException(status_code=503, detail="Local PII policy cannot be loaded safely.") from exc
 
     if not file.filename.lower().endswith('.pdf'):
         raise HTTPException(status_code=400, detail="Only PDF files are supported.")
@@ -36,6 +53,12 @@ async def upload_document(
     # Preprocess tables for better LLM PII extraction
     preprocessed_pages = preprocess_pages_for_pii(pages)
     
+    # Snapshot the active model for this document before the first analysis.
+    try:
+        model_key = get_selected_model()
+    except ModelPreferenceError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
     # Create session with selected profile
     doc_id = str(uuid.uuid4())
     file_hash = hashlib.sha256(file_bytes).hexdigest()
@@ -45,6 +68,10 @@ async def upload_document(
         original_filename=file.filename,
         file_hash=file_hash,
         profile_name=profile,
+        model_key=model_key,
+        policy_types=resolved_types,
+        policy_prompt=resolved_prompt,
+        policy_digest=policy_digest,
         pages=pages,
         preprocessed_pages=preprocessed_pages,
         pii_results={},
@@ -72,5 +99,7 @@ async def upload_document(
         doc_id=doc_id,
         page_count=len(pages),
         profile=profile,
+        model=model_key,
+        policy_digest=policy_digest,
         pages=response_pages
     )

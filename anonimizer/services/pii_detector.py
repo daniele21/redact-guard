@@ -10,11 +10,12 @@ from domain.detection import (
     DetectionDiagnostics,
     LLMInferenceResult,
 )
-from domain.models import PageAnalysisResult, PageMarkdown, PIIField
+from domain.models import PageAnalysisResult, PageMarkdown, PIIField, PIITypeDefinition
 from services.finding_identity import build_entity_id, build_finding_id
 from services.korgis_client import call_korgis
 from services.output_contract import parse_model_response
 from services.profile_service import get_all_pii_types
+from services.resource_evidence import ResourceEvidenceAccumulator
 from services.prompt_builder import build_system_prompt
 from services.text_segments import segment_text
 from utils.span_utils import _find_whitespace_normalized_span
@@ -22,21 +23,30 @@ from utils.span_utils import _find_whitespace_normalized_span
 logger = logging.getLogger("redactguard.pii_detector")
 
 
-def call_local_llm(prompt: str, user_text: str) -> LLMInferenceResult:
-    """Compatibility wrapper around the versioned Korgis inference boundary."""
-    return call_korgis(prompt, user_text)
+def call_local_llm(
+    prompt: str, user_text: str, model_key: str | None = None
+) -> LLMInferenceResult:
+    """Single Korgis inference owner: model is frozen at document creation."""
+    return (
+        call_korgis(prompt, user_text, model_key=model_key)
+        if model_key else call_korgis(prompt, user_text)
+    )
 
 
 def detect_pii_for_page(
     page: PageMarkdown,
     profile_name: str,
     force: bool = False,
+    model_key: str | None = None,
+    policy_types: list[PIITypeDefinition] | None = None,
+    policy_prompt: str | None = None,
 ) -> PageAnalysisResult:
     """Analyze one page with the versioned RedactGuard detection contract."""
-    system_prompt = build_system_prompt(profile_name)
+    selected_model = model_key or config.korgis_model
+    system_prompt = policy_prompt if policy_prompt is not None else build_system_prompt(profile_name)
     type_definitions = {
         pii_type.name: pii_type
-        for pii_type in get_all_pii_types(profile_name)
+        for pii_type in (policy_types if policy_types is not None else get_all_pii_types(profile_name))
     }
     allowed_types = set(type_definitions)
     segments = segment_text(
@@ -55,6 +65,7 @@ def detect_pii_for_page(
     parsed_items = 0
     resolved_items = 0
     unresolved_items = 0
+    resource_evidence = ResourceEvidenceAccumulator()
 
     cache_variant = (
         f"{DETECTION_CONTRACT_VERSION};"
@@ -67,7 +78,7 @@ def detect_pii_for_page(
         cache_key = build_llm_cache_key(
             system_prompt,
             segment.text,
-            config.korgis_model,
+            selected_model,
             variant=cache_variant,
         )
         cached_raw = cache_manager.get_llm(cache_key) if not force else None
@@ -76,13 +87,17 @@ def detect_pii_for_page(
             raw_response = str(cached_raw)
             cache_hits += 1
         else:
-            inference = call_local_llm(system_prompt, segment.text)
+            inference = (
+                call_local_llm(system_prompt, segment.text, model_key=selected_model)
+                if model_key else call_local_llm(system_prompt, segment.text)
+            )
             raw_response = inference.content
             total_latency_ms += inference.latency_ms
             input_tokens = _add_optional(input_tokens, inference.input_tokens)
             output_tokens = _add_optional(output_tokens, inference.output_tokens)
             if inference.finish_reason:
                 finish_reasons.append(inference.finish_reason)
+            resource_evidence.record_inference(inference.korgis_evidence)
 
         parsed = parse_model_response(
             raw_response,
@@ -166,8 +181,10 @@ def detect_pii_for_page(
             "resolved to the source text and were not redacted."
         )
 
+    resource_summary = resource_evidence.summary()
+
     diagnostics = DetectionDiagnostics(
-        model=config.korgis_model,
+        model=selected_model,
         chunks=len(segments),
         cache_hits=cache_hits,
         latency_ms=total_latency_ms,
@@ -177,6 +194,19 @@ def detect_pii_for_page(
         parsed_items=parsed_items,
         resolved_items=resolved_items,
         unresolved_items=unresolved_items,
+        inference_requests=resource_summary.inference_requests,
+        resource_evidence_requests=resource_summary.evidence_requests,
+        peak_memory_bytes=resource_summary.peak_memory_bytes,
+        peak_memory_delta_bytes=resource_summary.peak_memory_delta_bytes,
+        average_cpu_percent=resource_summary.average_cpu_percent,
+        peak_cpu_percent=resource_summary.peak_cpu_percent,
+        resource_cpu_sample_count=resource_summary.cpu_sample_count,
+        resource_cpu_observation_ms=resource_summary.cpu_observation_ms,
+        resource_sampling_interval_ms=resource_summary.sampling_interval_ms,
+        resource_memory_sources=list(resource_summary.memory_sources),
+        resource_cpu_sources=list(resource_summary.cpu_sources),
+        resource_attribution_scopes=list(resource_summary.attribution_scopes),
+        resource_attribution_qualities=list(resource_summary.attribution_qualities),
     )
 
     return PageAnalysisResult(

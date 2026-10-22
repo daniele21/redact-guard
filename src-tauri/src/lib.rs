@@ -5,7 +5,9 @@ mod sidecar;
 
 struct SidecarState {
     api_child: Mutex<Option<CommandChild>>,
-    api_port: Mutex<u16>,
+    api_port: Mutex<Option<u16>>,
+    korgis_child: Mutex<Option<CommandChild>>,
+    korgis_port: Mutex<Option<u16>>,
 }
 
 impl Drop for SidecarState {
@@ -13,11 +15,15 @@ impl Drop for SidecarState {
         if let Some(child) = self.api_child.lock().unwrap().take() {
             let _ = child.kill();
         }
+        if let Some(child) = self.korgis_child.lock().unwrap().take() {
+            let _ = child.kill();
+        }
     }
 }
 
 #[tauri::command]
-fn get_api_port(state: tauri::State<SidecarState>) -> u16 {
+fn get_api_port(state: tauri::State<SidecarState>) -> Option<u16> {
+    // Only health-verified API ports may be exposed to the frontend.
     *state.api_port.lock().unwrap()
 }
 
@@ -33,7 +39,9 @@ pub fn run() {
         )
         .manage(SidecarState {
             api_child: Mutex::new(None),
-            api_port: Mutex::new(8000),
+            api_port: Mutex::new(None),
+            korgis_child: Mutex::new(None),
+            korgis_port: Mutex::new(None),
         })
         .setup(|app| {
             let handle = app.handle().clone();

@@ -1,28 +1,34 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Download, CheckCircle2, RotateCcw, Copy, Check, FileText, ShieldCheck, Eye, ShieldOff, Presentation } from 'lucide-react';
-import { DocumentState } from '../../hooks/useDocument';
+import type { DocumentState } from '../../hooks/useDocument';
 import { api } from '../../services/api';
 import { ClientProtectionReport } from './ClientProtectionReport';
 
 interface ExportStepProps {
   state: DocumentState;
   onReset: () => void;
+  onResetLabel?: string;
 }
 
-export function ExportStep({ state, onReset }: ExportStepProps) {
+export function ExportStep({ state, onReset, onResetLabel = 'Nuovo documento' }: ExportStepProps) {
   const [copied, setCopied] = useState(false);
+  const [copyError, setCopyError] = useState('');
   const [showClientReport, setShowClientReport] = useState(false);
   
-  const handleDownload = () => {
-    if (!state.docId) return;
-    const url = api.exportDocumentUrl(state.docId);
-    // Create an invisible anchor to trigger download
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = '';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+  const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState('');
+
+  const handleDownload = async () => {
+    if (!state.docId || downloading) return;
+    setDownloading(true);
+    setDownloadError('');
+    try {
+      await api.downloadProtectedDocument(state.docId, state.filename);
+    } catch (cause) {
+      setDownloadError(cause instanceof Error ? cause.message : 'Impossibile esportare il documento.');
+    } finally {
+      setDownloading(false);
+    }
   };
 
   const handleDownloadClientReport = () => {
@@ -35,15 +41,20 @@ export function ExportStep({ state, onReset }: ExportStepProps) {
     document.body.removeChild(a);
   };
 
-  const combinedText = state.redactedPages
+  const combinedText = [...state.redactedPages]
     .sort((a, b) => a.page_number - b.page_number)
     .map(p => p.text)
     .join('\n\n---\n\n');
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(combinedText);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleCopy = async () => {
+    setCopyError('');
+    try {
+      await navigator.clipboard.writeText(combinedText);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopyError('Impossibile copiare: verifica i permessi degli appunti.');
+    }
   };
 
   if (showClientReport && state.summary) {
@@ -65,11 +76,15 @@ export function ExportStep({ state, onReset }: ExportStepProps) {
           </div>
           
           <h2 className="text-2xl md:text-3xl font-bold text-on-surface tracking-tight mb-2">
-            Anonymization Complete
+            Revisione completata
           </h2>
           
+          <p className="mx-auto mt-2 max-w-md truncate rounded-full bg-surface-container-high px-3 py-1.5 text-xs font-medium text-on-surface-variant" title={state.filename}>
+            Documento: {state.filename}
+          </p>
+
           <p className="text-on-surface-variant max-w-md mx-auto leading-relaxed text-sm md:text-base">
-            Your document has been successfully processed. All selected sensitive information has been redacted.
+            Le decisioni di oscuramento sono state applicate alle occorrenze rilevate. Verifica sempre il risultato prima di condividerlo.
           </p>
         </div>
 
@@ -78,44 +93,44 @@ export function ExportStep({ state, onReset }: ExportStepProps) {
             <div className="bg-primary/5 border border-primary/15 rounded-2xl p-4">
               <div className="flex items-center gap-2 text-primary text-xs font-bold uppercase tracking-wider">
                 <ShieldCheck className="w-4 h-4" />
-                Redacted
+                Oscurate
               </div>
               <div className="text-2xl font-bold text-on-surface mt-2">
                 {state.summary.decision_counts.redact}
               </div>
-              <p className="text-xs text-on-surface-variant mt-1">Protected occurrences</p>
+              <p className="text-xs text-on-surface-variant mt-1">Occorrenze oscurate</p>
             </div>
             <div className="bg-surface-container-low border border-outline-variant rounded-2xl p-4">
               <div className="flex items-center gap-2 text-on-surface-variant text-xs font-bold uppercase tracking-wider">
                 <Eye className="w-4 h-4" />
-                Retained
+                Mantenute
               </div>
               <div className="text-2xl font-bold text-on-surface mt-2">
                 {state.summary.decision_counts.keep}
               </div>
-              <p className="text-xs text-on-surface-variant mt-1">Explicitly kept</p>
+              <p className="text-xs text-on-surface-variant mt-1">Conservate dopo revisione</p>
             </div>
             <div className="bg-surface-container-low border border-outline-variant rounded-2xl p-4">
               <div className="flex items-center gap-2 text-on-surface-variant text-xs font-bold uppercase tracking-wider">
                 <ShieldOff className="w-4 h-4" />
-                Not PII
+                Non PII
               </div>
               <div className="text-2xl font-bold text-on-surface mt-2">
                 {state.summary.decision_counts.not_pii}
               </div>
-              <p className="text-xs text-on-surface-variant mt-1">Dismissed findings</p>
+              <p className="text-xs text-on-surface-variant mt-1">Rilevamenti esclusi</p>
             </div>
             <div className="bg-success/5 border border-success/15 rounded-2xl p-4">
               <div className="text-success text-xs font-bold uppercase tracking-wider">
-                Coverage
+                Analisi
               </div>
               <div className="text-2xl font-bold text-on-surface mt-2">
                 {state.summary.pages_analyzed}/{state.summary.pages_total}
               </div>
               <p className="text-xs text-on-surface-variant mt-1">
                 {state.summary.unresolved_findings === 0
-                  ? 'No unresolved findings'
-                  : `${state.summary.unresolved_findings} unresolved`}
+                  ? 'Nessun rilevamento non risolto'
+                  : `${state.summary.unresolved_findings} rilevamenti da verificare`}
               </p>
             </div>
           </div>
@@ -126,20 +141,21 @@ export function ExportStep({ state, onReset }: ExportStepProps) {
           <div className="px-5 py-3 border-b border-outline-variant bg-surface-container-high flex justify-between items-center">
             <div className="flex items-center gap-2">
               <FileText className="w-4 h-4 text-primary" />
-              <span className="text-xs font-bold text-on-surface uppercase tracking-wider">Document Preview</span>
+              <span className="text-xs font-bold text-on-surface uppercase tracking-wider">Anteprima del testo protetto</span>
             </div>
             <div className="flex items-center gap-4">
               <span className="text-[10px] md:text-xs font-medium text-on-surface-variant bg-surface-container-highest px-2 py-0.5 rounded-full">
-                {state.redactedPages.length} {state.redactedPages.length === 1 ? 'page' : 'pages'}
+                {state.redactedPages.length} {state.redactedPages.length === 1 ? 'pagina' : 'pagine'}
               </span>
               <button
-                onClick={handleCopy}
+                type="button"
+                onClick={() => { void handleCopy(); }}
                 className="flex items-center gap-1.5 text-xs font-bold text-primary hover:text-primary-container transition-colors"
               >
                 {copied ? (
-                  <><Check className="w-3.5 h-3.5" /> Copied</>
+                  <><Check className="w-3.5 h-3.5" /> Copiato</>
                 ) : (
-                  <><Copy className="w-3.5 h-3.5" /> Copy Text</>
+                  <><Copy className="w-3.5 h-3.5" /> Copia testo</>
                 )}
               </button>
             </div>
@@ -147,19 +163,23 @@ export function ExportStep({ state, onReset }: ExportStepProps) {
           <div className="h-[300px] md:h-[450px] overflow-y-auto p-6 md:p-8 font-mono text-xs md:text-sm whitespace-pre-wrap text-on-surface leading-relaxed">
             {combinedText || (
               <div className="h-full flex items-center justify-center text-outline-variant italic">
-                No redacted content available.
+                Nessun testo protetto disponibile.
               </div>
             )}
           </div>
         </div>
 
+        {copyError && <p role="alert" className="text-sm text-error">{copyError}</p>}
+
         <div className="grid sm:grid-cols-2 gap-3 pt-2">
           <button
-            onClick={handleDownload}
+            type="button"
+            disabled={downloading}
+            onClick={() => { void handleDownload(); }}
             className="flex items-center gap-3 px-6 py-4 bg-primary text-on-primary rounded-2xl font-bold hover:bg-primary-container shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all justify-center"
           >
             <Download className="w-5 h-5" />
-            Download protected document
+            {downloading ? 'Preparazione Markdown…' : 'Scarica documento protetto (.md)'}
           </button>
 
           <button
@@ -168,9 +188,11 @@ export function ExportStep({ state, onReset }: ExportStepProps) {
             className="flex items-center gap-3 px-6 py-4 bg-surface text-on-surface rounded-2xl border border-outline-variant font-bold hover:border-primary/40 hover:text-primary transition-all justify-center disabled:opacity-50"
           >
             <Presentation className="w-5 h-5" />
-            View client protection report
+            Visualizza report di protezione
           </button>
         </div>
+
+        {downloadError && <p role="alert" className="text-sm text-error">{downloadError}</p>}
 
         <div className="flex justify-center">
           <button
@@ -178,13 +200,13 @@ export function ExportStep({ state, onReset }: ExportStepProps) {
             className="flex items-center gap-2 px-5 py-3 text-on-surface-variant font-semibold hover:text-on-surface transition-colors"
           >
             <RotateCcw className="w-4 h-4" />
-            Start over
+            {onResetLabel}
           </button>
         </div>
       </div>
       
       <div className="mt-8 text-center text-xs text-outline font-medium flex items-center justify-center gap-2">
-        <ShieldIcon /> Processed locally. Review decisions and protection outcome remain on this device.
+        <ShieldIcon /> Elaborato localmente. Le decisioni di revisione e i risultati rimangono sul dispositivo.
       </div>
     </div>
   );

@@ -1,3 +1,4 @@
+import { createBackendBaseResolver } from './backendAddress';
 import {
   UploadResponse,
   PageAnalysisResult,
@@ -9,29 +10,25 @@ import {
   PIITypeDefinition,
   HealthResponse,
   DocumentAnalysisSummary,
+  LocalModelCatalog,
+  AnalysisJob,
+  ScopedPolicyDetail,
 } from '../types';
 
 let API_BASE = '/api';
-let _resolvePromise: Promise<string> | null = null;
 
-function resolveApiBase(): Promise<string> {
-  if (!_resolvePromise) {
-    _resolvePromise = (async () => {
-      try {
-        const { invoke } = await import('@tauri-apps/api/core');
-        const port = await invoke<number>('get_api_port');
-        API_BASE = `http://127.0.0.1:${port}/api`;
-      } catch {
-        // Dev mode with Vite proxy.
-      }
-      return API_BASE;
-    })();
-  }
-  return _resolvePromise;
-}
+// Native IPC returns null until the actual API has passed its health check.
+// Never cache an initial placeholder port or mask a native error as Vite proxy.
+const resolveApiBase = createBackendBaseResolver(
+  () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window,
+  async () => {
+    const { invoke } = await import('@tauri-apps/api/core');
+    return invoke<number | null>('get_api_port');
+  },
+);
 
 async function getBase(): Promise<string> {
-  await resolveApiBase();
+  API_BASE = await resolveApiBase();
   return API_BASE;
 }
 
@@ -70,6 +67,38 @@ export const api = {
     if (!res.ok) {
       throw new Error(await errorMessage(res, 'Upload failed'));
     }
+    return res.json();
+  },
+
+  startAnalysisJob: async (docId: string, pages: number[], force: boolean = false): Promise<AnalysisJob> => {
+    const base = await getBase();
+    const res = await fetch(`${base}/jobs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ document_id: docId, pages, force }),
+    });
+    if (!res.ok) throw new Error(await errorMessage(res, 'Impossibile accodare l’analisi.'));
+    return res.json();
+  },
+
+  getAnalysisJob: async (jobId: string): Promise<AnalysisJob> => {
+    const base = await getBase();
+    const res = await fetch(`${base}/jobs/${encodeURIComponent(jobId)}`, { cache: 'no-store' });
+    if (!res.ok) throw new Error(await errorMessage(res, 'Stato analisi non disponibile.'));
+    return res.json();
+  },
+
+  getJobResults: async (jobId: string): Promise<PageAnalysisResult[]> => {
+    const base = await getBase();
+    const res = await fetch(`${base}/jobs/${encodeURIComponent(jobId)}/results`, { cache: 'no-store' });
+    if (!res.ok) throw new Error(await errorMessage(res, 'Risultati analisi non disponibili.'));
+    return res.json();
+  },
+
+  cancelAnalysisJob: async (jobId: string): Promise<AnalysisJob> => {
+    const base = await getBase();
+    const res = await fetch(`${base}/jobs/${encodeURIComponent(jobId)}/cancel`, { method: 'POST' });
+    if (!res.ok) throw new Error(await errorMessage(res, 'Impossibile annullare il job.'));
     return res.json();
   },
 
@@ -117,7 +146,7 @@ export const api = {
     const res = await fetch(`${base}/redact/${docId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fields_to_redact: fieldsToRedact }),
+      body: JSON.stringify({ fields_to_redact: fieldsToRedact, review_attested: true }),
     });
     if (!res.ok) {
       throw new Error(await errorMessage(res, 'Failed to apply review decisions'));
@@ -136,6 +165,42 @@ export const api = {
     const base = await getBase();
     const res = await fetch(`${base}/profiles/${name}`);
     if (!res.ok) throw new Error('Failed to fetch profile detail');
+    return res.json();
+  },
+
+  getScopedPolicy: async (profile: string): Promise<ScopedPolicyDetail> => {
+    const base = await getBase();
+    const res = await fetch(`${base}/profiles/${encodeURIComponent(profile)}/policy`, { cache: 'no-store' });
+    if (!res.ok) throw new Error(await errorMessage(res, 'Cannot load PII policy'));
+    return res.json();
+  },
+
+  saveScopedVariant: async (profile: string, key: string, description: string, label: string): Promise<ScopedPolicyDetail> => {
+    const base = await getBase();
+    const res = await fetch(`${base}/profiles/${encodeURIComponent(profile)}/variants/${encodeURIComponent(key)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ description, label, enabled: true }),
+    });
+    if (!res.ok) throw new Error(await errorMessage(res, 'Cannot save PII variant'));
+    return res.json();
+  },
+
+  restoreScopedVariant: async (profile: string, key: string): Promise<ScopedPolicyDetail> => {
+    const base = await getBase();
+    const res = await fetch(`${base}/profiles/${encodeURIComponent(profile)}/variants/${encodeURIComponent(key)}/restore`, {
+      method: 'POST',
+    });
+    if (!res.ok) throw new Error(await errorMessage(res, 'Cannot restore PII definition'));
+    return res.json();
+  },
+
+  revertScopedVariant: async (profile: string, key: string, revision: number): Promise<ScopedPolicyDetail> => {
+    const base = await getBase();
+    const res = await fetch(`${base}/profiles/${encodeURIComponent(profile)}/variants/${encodeURIComponent(key)}/revert/${revision}`, {
+      method: 'POST',
+    });
+    if (!res.ok) throw new Error(await errorMessage(res, 'Cannot restore PII revision'));
     return res.json();
   },
 
@@ -186,6 +251,52 @@ export const api = {
       { method: 'DELETE' },
     );
     if (!res.ok) throw new Error('Failed to remove custom type');
+  },
+
+  clearCache: async (): Promise<void> => {
+    const base = await getBase();
+    const res = await fetch(`${base}/cache`, { method: 'DELETE' });
+    if (!res.ok) throw new Error(await errorMessage(res, 'Failed to clear local caches'));
+  },
+
+  getLocalModels: async (): Promise<LocalModelCatalog> => {
+    const base = await getBase();
+    const res = await fetch(`${base}/local-models`, { cache: 'no-store' });
+    if (!res.ok) throw new Error(await errorMessage(res, 'Failed to read local models'));
+    return res.json();
+  },
+
+  selectLocalModel: async (model: string): Promise<LocalModelCatalog> => {
+    const base = await getBase();
+    const res = await fetch(`${base}/local-models/selection`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model }),
+    });
+    if (!res.ok) throw new Error(await errorMessage(res, 'Failed to choose local model'));
+    return res.json();
+  },
+
+  downloadProtectedDocument: async (docId: string, originalFilename: string): Promise<void> => {
+    const base = await getBase();
+    const res = await fetch(`${base}/export/${encodeURIComponent(docId)}?format=md`, { cache: 'no-store' });
+    if (!res.ok) throw new Error(await errorMessage(res, 'Impossibile esportare il documento.'));
+
+    const stem = originalFilename.replace(/\.pdf$/i, '')
+      .replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^[._]+|[._]+$/g, '') || 'document';
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    try {
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = stem + '_protected.md';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } finally {
+      // Browsers can defer the navigation after link.click().
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    }
   },
 
   exportDocumentUrl: (docId: string): string => {

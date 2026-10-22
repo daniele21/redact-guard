@@ -36,7 +36,8 @@ def analysis_summary(doc_id: str):
             status_code=404,
             detail="Document session not found or expired.",
         )
-    return build_document_summary(session)
+    with session.operation_lock:
+        return build_document_summary(session)
 
 
 @router.post("/analyze/{doc_id}/page/{page_number}", response_model=PageAnalysisResult)
@@ -59,33 +60,44 @@ def analyze_page(doc_id: str, page_number: int, force: bool = False):
             detail=f"Page {page_number} not found in document.",
         )
 
-    session.page_analysis_status[page_number] = "analyzing"
-    session.page_analysis_errors.pop(page_number, None)
-    save_session(session)
-
-    try:
-        result = detect_pii_for_page(
-            page_to_analyze,
-            session.profile_name,
-            force=force,
-        )
-    except DetectionContractError as exc:
-        session.page_analysis_status[page_number] = "failed"
-        session.page_analysis_errors[page_number] = f"{exc.code.value}: {exc}"
+    with session.operation_lock:
+        # Starting a new analysis revokes review attestation and stale decisions
+        # for all prior findings on this page, even when the run fails.
+        session.review_attested = False
+        for previous in session.pii_results.pop(page_number, []):
+            session.review_decisions.pop(previous.finding_id, None)
+            session.redaction_overrides.pop(previous.finding_id, None)
         session.page_diagnostics.pop(page_number, None)
+        session.page_analysis_status[page_number] = "analyzing"
+        session.page_analysis_errors.pop(page_number, None)
         save_session(session)
-        raise _detection_http_error(exc) from exc
-
-    session.pii_results[page_number] = result.pii_fields
-    session.page_diagnostics[page_number] = result.diagnostics
-    session.page_analysis_status[page_number] = (
-        "warning" if result.warning else "complete"
-    )
-    session.page_analysis_errors.pop(page_number, None)
-    save_session(session)
-    return result
-
-
+    
+        try:
+            result = detect_pii_for_page(
+                page_to_analyze,
+                session.profile_name,
+                force=force,
+                model_key=session.model_key or None,
+                policy_types=session.policy_types,
+                policy_prompt=session.policy_prompt,
+            )
+        except DetectionContractError as exc:
+            session.page_analysis_status[page_number] = "failed"
+            session.page_analysis_errors[page_number] = f"{exc.code.value}: {exc}"
+            session.page_diagnostics.pop(page_number, None)
+            save_session(session)
+            raise _detection_http_error(exc) from exc
+    
+        session.pii_results[page_number] = result.pii_fields
+        session.page_diagnostics[page_number] = result.diagnostics
+        session.page_analysis_status[page_number] = (
+            "warning" if result.warning else "complete"
+        )
+        session.page_analysis_errors.pop(page_number, None)
+        save_session(session)
+        return result
+    
+    
 @router.post("/analyze/{doc_id}", response_model=BatchAnalysisResponse)
 def analyze_document_batch(doc_id: str):
     """Analyze all pages sequentially and preserve page-level status."""
@@ -96,29 +108,38 @@ def analyze_document_batch(doc_id: str):
             detail="Document session not found or expired.",
         )
 
-    results = []
-    for page in session.pages:
-        session.page_analysis_status[page.page_number] = "analyzing"
-        session.page_analysis_errors.pop(page.page_number, None)
-        save_session(session)
-
-        try:
-            result = detect_pii_for_page(page, session.profile_name)
-        except DetectionContractError as exc:
-            session.page_analysis_status[page.page_number] = "failed"
-            session.page_analysis_errors[page.page_number] = (
-                f"{exc.code.value}: {exc}"
-            )
+    with session.operation_lock:
+        results = []
+        for page in session.pages:
+            session.review_attested = False
+            for previous in session.pii_results.pop(page.page_number, []):
+                session.review_decisions.pop(previous.finding_id, None)
+                session.redaction_overrides.pop(previous.finding_id, None)
             session.page_diagnostics.pop(page.page_number, None)
+            session.page_analysis_status[page.page_number] = "analyzing"
+            session.page_analysis_errors.pop(page.page_number, None)
             save_session(session)
-            raise _detection_http_error(exc) from exc
-
-        session.pii_results[page.page_number] = result.pii_fields
-        session.page_diagnostics[page.page_number] = result.diagnostics
-        session.page_analysis_status[page.page_number] = (
-            "warning" if result.warning else "complete"
-        )
-        results.append(result)
-
-    save_session(session)
-    return BatchAnalysisResponse(pages=results)
+    
+            try:
+                result = detect_pii_for_page(page, session.profile_name, model_key=session.model_key or None,
+                                             policy_types=session.policy_types,
+                                             policy_prompt=session.policy_prompt)
+            except DetectionContractError as exc:
+                session.page_analysis_status[page.page_number] = "failed"
+                session.page_analysis_errors[page.page_number] = (
+                    f"{exc.code.value}: {exc}"
+                )
+                session.page_diagnostics.pop(page.page_number, None)
+                save_session(session)
+                raise _detection_http_error(exc) from exc
+    
+            session.pii_results[page.page_number] = result.pii_fields
+            session.page_diagnostics[page.page_number] = result.diagnostics
+            session.page_analysis_status[page.page_number] = (
+                "warning" if result.warning else "complete"
+            )
+            results.append(result)
+    
+        save_session(session)
+        return BatchAnalysisResponse(pages=results)
+    

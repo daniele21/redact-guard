@@ -13,6 +13,19 @@ export interface DetectionDiagnostics {
   parsed_items: number;
   resolved_items: number;
   unresolved_items: number;
+  inference_requests?: number;
+  resource_evidence_requests?: number;
+  peak_memory_bytes?: number | null;
+  peak_memory_delta_bytes?: number | null;
+  average_cpu_percent?: number | null;
+  peak_cpu_percent?: number | null;
+  resource_cpu_sample_count?: number | null;
+  resource_cpu_observation_ms?: number | null;
+  resource_sampling_interval_ms?: number | null;
+  resource_memory_sources?: string[];
+  resource_cpu_sources?: string[];
+  resource_attribution_scopes?: string[];
+  resource_attribution_qualities?: string[];
 }
 
 export interface PIIField {
@@ -51,6 +64,8 @@ export interface UploadResponse {
   doc_id: string;
   page_count: number;
   profile: string;
+  model: string;
+  policy_digest: string;
   pages: UploadResponsePage[];
 }
 
@@ -86,6 +101,23 @@ export type DocumentAnalysisStatus =
   | 'needs_attention'
   | 'failed';
 
+export interface DocumentResourceSummary {
+  inference_requests: number;
+  cache_hits: number;
+  evidence_requests: number;
+  peak_memory_bytes: number | null;
+  peak_memory_delta_bytes: number | null;
+  average_cpu_percent: number | null;
+  peak_cpu_percent: number | null;
+  cpu_sample_count: number | null;
+  sampling_interval_ms: number | null;
+  cpu_observation_ms: number | null;
+  memory_sources: string[];
+  cpu_sources: string[];
+  attribution_scopes: string[];
+  attribution_qualities: string[];
+}
+
 export interface DocumentAnalysisSummary {
   document_id: string;
   filename: string;
@@ -105,6 +137,7 @@ export interface DocumentAnalysisSummary {
   page_status: Record<string, string>;
   page_errors: Record<string, string>;
   entities: SensitiveEntitySummary[];
+  resources: DocumentResourceSummary;
   local_processing: boolean;
 }
 
@@ -147,6 +180,24 @@ export interface ProfileSummary {
   pii_type_count: number;
 }
 
+export interface PolicyRevision {
+  revision: number;
+  description?: string;
+  label?: string | null;
+  enabled?: boolean;
+  restore?: boolean;
+  created_at: string;
+}
+
+export interface ScopedPolicyDetail {
+  profile: string;
+  base_types: PIITypeDefinition[];
+  inherited_types: PIITypeDefinition[];
+  effective_types: PIITypeDefinition[];
+  origins: Record<string, 'predefined' | 'legacy_global' | 'scoped'>;
+  history: Record<string, PolicyRevision[]>;
+}
+
 export interface ProfileDetail {
   name: string;
   display_name: string;
@@ -154,10 +205,49 @@ export interface ProfileDetail {
   pii_types: PIITypeDefinition[];
 }
 
+export interface ModelChoice {
+  model_id: string;
+  startup_key: string;
+  downloaded: boolean;
+  resident: boolean;
+}
+
+export interface AnalysisJob {
+  job_id: string;
+  document_id: string;
+  status: 'queued' | 'running' | 'cancelling' | 'cancelled' | 'complete' | 'failed';
+  pages_total: number;
+  pages_completed: number;
+  completed_pages: number[];
+  current_page: number | null;
+  page_errors: Record<string, string>;
+  cancellable: boolean;
+}
+
+export interface LocalModelCatalog {
+  selected_model: string;
+  models: string[];
+  choices: ModelChoice[];
+  selected_resident: boolean;
+  discovery_available: boolean;
+  catalog_available: boolean;
+  hardware?: {
+    system?: string;
+    machine?: string;
+    processor?: string;
+    accelerator?: string;
+    logical_cpus?: number;
+    total_memory_bytes?: number;
+  } | null;
+}
+
 export interface HealthResponse {
   status: string;
-  llm_status: 'online' | 'offline' | 'model_not_resident';
+  llm_status: 'online' | 'offline' | 'model_not_resident' | 'runtime_incompatible';
   model: string;
+  korgis_mode: 'external' | 'managed';
   korgis_protocol_version: string | null;
+  korgis_compatibility: 'compatible' | 'legacy_compatible' | 'identity_incompatible' | null;
+  korgis_request_evidence_supported: boolean;
   cache_stats: Record<string, any>;
 }

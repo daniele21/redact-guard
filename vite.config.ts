@@ -22,6 +22,7 @@ export default defineConfig(({mode}) => {
     },
     clearScreen: false,
     server: {
+      host: '127.0.0.1',
       port: sharedConfig.server.frontend_port || 3000,
       strictPort: true,
       proxy: {
@@ -31,7 +32,11 @@ export default defineConfig(({mode}) => {
         },
       },
       hmr: process.env.DISABLE_HMR !== 'true',
-      watch: process.env.DISABLE_HMR === 'true' ? null : {},
+      // Tauri and the packaged Python runtime write thousands of generated files.
+      // Never trigger UI reloads from Rust/Python build output.
+      watch: process.env.DISABLE_HMR === 'true' ? null : {
+        ignored: ['**/src-tauri/target/**', '**/sidecar/target/**'],
+      },
     },
     envPrefix: ['VITE_', 'TAURI_'],
   };
