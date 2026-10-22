@@ -205,9 +205,29 @@ export interface ProfileDetail {
   pii_types: PIITypeDefinition[];
 }
 
+export interface ModelChoice {
+  model_id: string;
+  startup_key: string;
+  downloaded: boolean;
+  resident: boolean;
+}
+
+export interface AnalysisJob {
+  job_id: string;
+  document_id: string;
+  status: 'queued' | 'running' | 'cancelling' | 'cancelled' | 'complete' | 'failed';
+  pages_total: number;
+  pages_completed: number;
+  completed_pages: number[];
+  current_page: number | null;
+  page_errors: Record<string, string>;
+  cancellable: boolean;
+}
+
 export interface LocalModelCatalog {
   selected_model: string;
   models: string[];
+  choices: ModelChoice[];
   selected_resident: boolean;
   discovery_available: boolean;
   hardware?: {
