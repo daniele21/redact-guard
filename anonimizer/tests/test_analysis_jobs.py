@@ -1,11 +1,17 @@
 """Backend-owned queue regressions; synthetic document, no real model required."""
 import time
 import unittest
+import sys
+from pathlib import Path
 from datetime import datetime, timezone
 from threading import Event
 from unittest.mock import patch
 
 from fastapi import HTTPException
+
+BACKEND_DIR = Path(__file__).resolve().parents[1]
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
 
 from domain.models import DocumentSession, PageMarkdown, PageAnalysisResult
 from services.analysis_jobs import AnalysisJobs
