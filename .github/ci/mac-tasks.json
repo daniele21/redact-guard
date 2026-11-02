@@ -1,0 +1,11 @@
+{
+  "schema": "source-owned-mac-tasks/v1",
+  "tasks": {
+    "template-smoke": {
+      "description": "Local Python validation and unit suite; installs Python dependencies from package index without provider calls",
+      "script": ".github/ci/local-test.sh",
+      "cost_class": "free",
+      "manual_only": true
+    }
+  }
+}
